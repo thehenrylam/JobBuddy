@@ -19,9 +19,24 @@ npm run dev
 npm run dev:firefox
 ```
 
-Then load the extension from the generated `.output/` folder in your browser's extension manager:
-- **Chrome:** go to `chrome://extensions`, enable *Developer mode*, click *Load unpacked*, select `.output/chrome-mv3/`
-- **Firefox:** go to `about:debugging`, click *This Firefox*, click *Load Temporary Add-on*, select any file inside `.output/firefox-mv2/`
+Then load the extension from the generated `.output/` folder in your browser's extension manager.
+
+### Chrome
+
+1. Go to `chrome://extensions`
+2. Enable **Developer mode** (toggle in the top-right)
+3. Click **Load unpacked**
+4. Select the `.output/chrome-mv3/` folder
+
+### Firefox
+
+1. Go to `about:debugging`
+2. Click **This Firefox** in the left sidebar
+3. Click **Load Temporary Add-on...**
+4. Navigate to `.output/firefox-mv2/` — use **Cmd + Shift + .** to reveal hidden folders in the file picker
+5. Select `manifest.json` and click **Open**
+
+> **Note:** Firefox temporary add-ons are removed when Firefox closes. You'll need to reload it each session. For a permanent install, submit to the Mozilla Add-on store or self-sign with `web-ext sign`.
 
 ## Production Build
 
