@@ -1,0 +1,60 @@
+/* Solid buttons (primary, danger, secondary) */
+.jb-btn {
+  transition: filter 0.12s ease, transform 0.1s ease;
+}
+.jb-btn:hover {
+  filter: brightness(0.88);
+}
+.jb-btn:active {
+  filter: brightness(0.76);
+  transform: scale(0.96);
+}
+
+/* Back / ghost buttons — dim instead of filling with a background */
+.jb-btn-ghost {
+  transition: opacity 0.12s ease;
+}
+.jb-btn-ghost:hover {
+  opacity: 0.55;
+}
+.jb-btn-ghost:active {
+  opacity: 0.35;
+}
+
+/* Toggle buttons (API / Local) — hover only, no click effect */
+.jb-btn-toggle {
+  transition: filter 0.12s ease;
+}
+.jb-btn-toggle:hover {
+  filter: brightness(0.88);
+}
+
+/* Icon buttons (pencil, trash, gear) */
+.jb-btn-icon {
+  transition: filter 0.12s ease, transform 0.1s ease;
+}
+.jb-btn-icon:hover {
+  filter: brightness(0.88);
+}
+.jb-btn-icon:active {
+  filter: brightness(0.72);
+  transform: scale(0.92);
+}
+
+/* Clickable status / info boxes */
+.jb-clickable {
+  transition: filter 0.12s ease;
+}
+.jb-clickable:hover {
+  filter: brightness(0.94);
+}
+.jb-clickable:active {
+  filter: brightness(0.86);
+}
+
+/* Text inputs */
+.jb-input:focus {
+  outline: none;
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+}
