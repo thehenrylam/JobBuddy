@@ -1,22 +1,7 @@
 import React, { useState, useEffect } from 'react';
+import { type LLMConfig } from '../../services/llm';
 
-type LlmType = 'api' | 'local';
-
-interface LlmConfig {
-  type: LlmType;
-  baseUrl: string;
-  apiKey: string;
-  model: string;
-}
-
-const DEFAULT_CONFIG: LlmConfig = { type: 'api', baseUrl: '', apiKey: '', model: '' };
-const LOCAL_DEFAULT_URL = 'http://localhost:1234/v1';
-const API_DEFAULT_URL = 'https://api.openai.com/v1';
 const DRAFT_KEY = 'llmConfigDraft';
-
-function randomHex4(): string {
-  return Math.floor(Math.random() * 0xffff).toString(16).padStart(4, '0');
-}
 
 function PencilIcon() {
   return (
@@ -38,145 +23,77 @@ function TrashIcon() {
   );
 }
 
-export default function SettingsView({ onBack }: { onBack: () => void }) {
-  const [savedConfig, setSavedConfig] = useState<LlmConfig | null>(null);
-  const [editConfig, setEditConfig] = useState<LlmConfig>(DEFAULT_CONFIG);
-  const [isEditing, setIsEditing] = useState(true);
-  const [checking, setChecking] = useState(false);
-  const [checkError, setCheckError] = useState('');
-  const [checkSuccess, setCheckSuccess] = useState(false);
+function DownloadIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={1.5} stroke="currentColor" width={15} height={15}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+  );
+}
 
-  // Load saved config + any in-progress draft on mount
+function HashtagIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={1.5} stroke="currentColor" width={15} height={15}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M5.25 8.25h15m-16.5 7.5h15m-1.8-13.5-3.9 19.5m-2.1-19.5-3.9 19.5" />
+    </svg>
+  );
+}
+
+function ChevronIcon({ open }: { open: boolean }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={2} stroke="currentColor" width={12} height={12}
+      style={{ transform: open ? 'rotate(90deg)' : 'rotate(0deg)', transition: 'transform 0.2s ease' }}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="m8.25 4.5 7.5 7.5-7.5 7.5" />
+    </svg>
+  );
+}
+
+export default function SettingsView({ onBack, onLlmSettings }: { onBack: () => void; onLlmSettings: () => void }) {
+  const [savedConfig, setSavedConfig] = useState<LLMConfig | null>(null);
+  const [devToolsOpen, setDevToolsOpen] = useState(false);
+  const [tokenEstimate, setTokenEstimate] = useState<string | null>(null);
+
   useEffect(() => {
-    browser.storage.local.get(['llmConfig', DRAFT_KEY]).then((result) => {
-      const saved = result.llmConfig as LlmConfig | undefined;
-      const draft = result[DRAFT_KEY] as LlmConfig | undefined;
-      if (saved) {
-        setSavedConfig(saved);
-        if (draft) {
-          // Resume the edit the user was mid-way through
-          setEditConfig(draft);
-          setIsEditing(true);
-        } else {
-          setIsEditing(false);
-        }
-      } else if (draft) {
-        setEditConfig(draft);
-      }
+    browser.storage.local.get('llmConfig').then((result) => {
+      setSavedConfig(result.llmConfig ?? null);
     });
   }, []);
-
-  // Persist draft while editing so closing the popup doesn't lose progress
-  useEffect(() => {
-    if (!isEditing) return;
-    browser.storage.local.set({ [DRAFT_KEY]: editConfig });
-  }, [editConfig, isEditing]);
-
-  const patch = (p: Partial<LlmConfig>) => setEditConfig((prev) => ({ ...prev, ...p }));
-
-  const handleTypeChange = (type: LlmType) => {
-    setEditConfig({ ...DEFAULT_CONFIG, type });
-    setCheckError('');
-    setCheckSuccess(false);
-  };
-
-  const handleEdit = () => {
-    setEditConfig(savedConfig!);
-    setIsEditing(true);
-    setCheckError('');
-    setCheckSuccess(false);
-  };
 
   const handleClear = async () => {
     await browser.storage.local.remove(['llmConfig', DRAFT_KEY]);
     setSavedConfig(null);
-    setEditConfig(DEFAULT_CONFIG);
-    setIsEditing(true);
-    setCheckError('');
-    setCheckSuccess(false);
   };
 
-  const performCheck = async (): Promise<void> => {
-    const hex = randomHex4();
-    const expected = `Hello World (${hex})`;
-    const prompt = `Respond with this exact phrase: "${expected}"`;
-    const baseUrl = editConfig.baseUrl || (editConfig.type === 'local' ? LOCAL_DEFAULT_URL : API_DEFAULT_URL);
-    const url = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    try {
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (editConfig.apiKey) headers['Authorization'] = `Bearer ${editConfig.apiKey}`;
-
-      const res = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          model: editConfig.model || undefined,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: 50,
-          temperature: 0,
-        }),
-        signal: controller.signal,
-      });
-
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`HTTP ${res.status}: ${text}`);
-      }
-
-      const data = await res.json();
-      const reply: string = data.choices?.[0]?.message?.content?.trim() ?? '';
-
-      if (reply !== expected) {
-        throw new Error(`Invalid response.\n\nExpected: "${expected}"\nReceived: "${reply}"`);
-      }
-    } catch (err) {
-      const msg =
-        err instanceof Error && err.name === 'AbortError'
-          ? 'Request timed out after 15 seconds.'
-          : err instanceof Error ? err.message : String(err);
-      throw new Error(msg);
-    } finally {
-      clearTimeout(timeout);
-    }
+  const handleDownloadDom = async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    await browser.scripting.executeScript({
+      target: { tabId: tab.id! },
+      func: () => {
+        const text = document.body.innerText;
+        const blob = new Blob([text], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = Object.assign(document.createElement('a'), { href: url, download: `dom-${Date.now()}.txt` });
+        a.click();
+        URL.revokeObjectURL(url);
+      },
+    });
   };
 
-  const handleCheck = async () => {
-    setChecking(true);
-    setCheckError('');
-    setCheckSuccess(false);
-    try {
-      await performCheck();
-      setCheckSuccess(true);
-    } catch (err) {
-      setCheckError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setChecking(false);
-    }
+  const handleEstimateTokens = async () => {
+    const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+    const results = await browser.scripting.executeScript({
+      target: { tabId: tab.id! },
+      func: () => document.body.innerText,
+    });
+    const text = results[0].result as string;
+    const count = Math.ceil(text.length / 4);
+    setTokenEstimate(`~${count.toLocaleString()} tokens (estimated)`);
   };
-
-  const handleSave = async () => {
-    setChecking(true);
-    setCheckError('');
-    setCheckSuccess(false);
-    try {
-      await performCheck();
-      await browser.storage.local.set({ llmConfig: editConfig });
-      await browser.storage.local.remove(DRAFT_KEY);
-      setSavedConfig(editConfig);
-      setIsEditing(false);
-    } catch (err) {
-      setCheckError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setChecking(false);
-    }
-  };
-
-  const baseUrlPlaceholder = editConfig.type === 'local' ? LOCAL_DEFAULT_URL : API_DEFAULT_URL;
-  const resolvedBaseUrl = savedConfig?.baseUrl || (savedConfig?.type === 'local' ? LOCAL_DEFAULT_URL : API_DEFAULT_URL);
 
   return (
     <div style={styles.container}>
@@ -187,117 +104,64 @@ export default function SettingsView({ onBack }: { onBack: () => void }) {
 
       <section>
         <p style={styles.sectionLabel}>LLM</p>
-
-        {!isEditing && savedConfig ? (
-          /* ── Saved config card ── */
-          <div style={styles.configCard}>
-            <div style={styles.configDetails}>
-              <span style={styles.configBadge}>
-                {savedConfig.type === 'local' ? 'Local' : 'API'}
-              </span>
-              <span style={styles.configUrl}>{resolvedBaseUrl}</span>
-              {savedConfig.model && (
-                <span style={styles.configModel}>{savedConfig.model}</span>
-              )}
-            </div>
-            <div style={styles.configActions}>
-              <button className="jb-btn-icon" style={styles.iconButton} onClick={handleEdit} title="Edit">
-                <PencilIcon />
-              </button>
+        <div style={styles.configCard}>
+          <div style={styles.configDetails}>
+            {savedConfig ? (
+              <>
+                <span style={styles.configBadge}>
+                  {savedConfig.type === 'local' ? 'Local' : 'API'}
+                </span>
+                <span style={styles.configUrl}>{savedConfig.baseUrl}</span>
+                {savedConfig.model && (
+                  <span style={styles.configModel}>{savedConfig.model}</span>
+                )}
+              </>
+            ) : (
+              <>
+                <span style={styles.configBadgeNone}>None</span>
+                <span style={styles.commentText}>Set up the LLM endpoint here.</span>
+              </>
+            )}
+          </div>
+          <div style={styles.configActions}>
+            <button className="jb-btn-icon" style={styles.iconButton} onClick={onLlmSettings} title="Edit">
+              <PencilIcon />
+            </button>
+            {savedConfig && (
               <button className="jb-btn-icon" style={{ ...styles.iconButton, ...styles.iconButtonDanger }} onClick={handleClear} title="Clear">
                 <TrashIcon />
               </button>
-            </div>
+            )}
           </div>
-        ) : (
-          /* ── Edit form ── */
-          <>
-            <div style={styles.typeToggle}>
-              <button
-                className="jb-btn-toggle"
-                style={{ ...styles.typeBtn, ...(editConfig.type === 'api' ? styles.typeBtnActive : {}) }}
-                onClick={() => handleTypeChange('api')}
-              >
-                API
+        </div>
+      </section>
+
+      <section>
+        <button style={styles.devToolsHeader} onClick={() => setDevToolsOpen(o => !o)}>
+          <ChevronIcon open={devToolsOpen} />
+          <span style={styles.sectionLabel}>Developer Tools</span>
+        </button>
+
+        {devToolsOpen && (
+          <div style={styles.devToolsBody}>
+            <div style={styles.devToolsRow}>
+              <button className="jb-btn-icon" style={styles.iconButton} onClick={handleDownloadDom} title="Download DOM">
+                <DownloadIcon />
               </button>
-              <button
-                className="jb-btn-toggle"
-                style={{ ...styles.typeBtn, ...(editConfig.type === 'local' ? styles.typeBtnActive : {}) }}
-                onClick={() => handleTypeChange('local')}
-              >
-                Local
-              </button>
+              <span style={styles.devToolsLabel}>Download page text as a .txt file</span>
             </div>
 
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>Base URL</label>
-              <input
-                className="jb-input"
-                style={styles.input}
-                type="url"
-                placeholder={baseUrlPlaceholder}
-                value={editConfig.baseUrl}
-                onChange={(e) => patch({ baseUrl: e.target.value })}
-              />
-              <span style={styles.hint}>
-                {editConfig.type === 'local'
-                  ? 'LM Studio: enable "OpenAI Compatible Server" → use http://localhost:1234/v1'
-                  : '/chat/completions is appended automatically.'}
-              </span>
+            <div style={styles.devToolsRow}>
+              <button className="jb-btn-icon" style={styles.iconButton} onClick={handleEstimateTokens} title="Estimate tokens">
+                <HashtagIcon />
+              </button>
+              <span style={styles.devToolsLabel}>Estimate token count of page text</span>
             </div>
 
-            {editConfig.type === 'api' && (
-              <div style={styles.fieldGroup}>
-                <label style={styles.label}>API Key</label>
-                <input
-                  className="jb-input"
-                  style={styles.input}
-                  type="password"
-                  placeholder="sk-..."
-                  value={editConfig.apiKey}
-                  onChange={(e) => patch({ apiKey: e.target.value })}
-                />
-              </div>
+            {tokenEstimate && (
+              <div style={styles.devToolsResult}>{tokenEstimate}</div>
             )}
-
-            <div style={styles.fieldGroup}>
-              <label style={styles.label}>Model</label>
-              <input
-                className="jb-input"
-                style={styles.input}
-                type="text"
-                placeholder={editConfig.type === 'local' ? 'e.g. lmstudio-community/...' : 'e.g. gpt-4o'}
-                value={editConfig.model}
-                onChange={(e) => patch({ model: e.target.value })}
-              />
-            </div>
-
-            <div style={styles.actionRow}>
-              <button
-                className="jb-btn"
-                style={{ ...styles.checkButton, opacity: checking ? 0.6 : 1 }}
-                onClick={handleCheck}
-                disabled={checking}
-              >
-                {checking ? 'Checking...' : 'Check LLM'}
-              </button>
-              <button
-                className="jb-btn"
-                style={{ ...styles.saveButton, opacity: checking ? 0.6 : 1 }}
-                onClick={handleSave}
-                disabled={checking}
-              >
-                {checking ? 'Saving...' : 'Save'}
-              </button>
-            </div>
-
-            {checkSuccess && !checkError && (
-              <div style={styles.successBox}>LLM responded correctly.</div>
-            )}
-            {checkError !== '' && (
-              <div style={styles.errorBox}>{checkError}</div>
-            )}
-          </>
+          </div>
         )}
       </section>
     </div>
@@ -340,7 +204,6 @@ const styles: Record<string, React.CSSProperties> = {
     letterSpacing: '0.05em',
     margin: '0 0 8px',
   },
-  // ── Saved config card ──
   configCard: {
     display: 'flex',
     alignItems: 'flex-start',
@@ -363,6 +226,18 @@ const styles: Record<string, React.CSSProperties> = {
     textTransform: 'uppercase',
     letterSpacing: '0.05em',
     color: '#2563eb',
+  },
+  configBadgeNone: {
+    fontSize: 10,
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    color: '#dc2626',
+  },
+  commentText: {
+    fontSize: 11,
+    color: '#333',
+    wordBreak: 'break-all',
   },
   configUrl: {
     fontSize: 11,
@@ -398,97 +273,37 @@ const styles: Record<string, React.CSSProperties> = {
     background: '#fff1f2',
     border: '1px solid #fecdd3',
   },
-  // ── Edit form ──
-  typeToggle: {
+  devToolsHeader: {
     display: 'flex',
-    borderRadius: 6,
-    overflow: 'hidden',
-    border: '1px solid #ddd',
-    marginBottom: 10,
-  },
-  typeBtn: {
-    flex: 1,
-    padding: '6px 0',
-    background: '#f5f5f5',
+    alignItems: 'center',
+    gap: 6,
+    background: 'none',
     border: 'none',
     cursor: 'pointer',
-    fontSize: 13,
-    color: '#555',
-  },
-  typeBtnActive: {
-    background: '#2563eb',
-    color: '#fff',
-    fontWeight: 600,
-  },
-  fieldGroup: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 4,
+    padding: 0,
     marginBottom: 8,
   },
-  label: {
+  devToolsBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  devToolsRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+  },
+  devToolsLabel: {
     fontSize: 12,
     color: '#555',
   },
-  input: {
-    padding: '6px 8px',
-    fontSize: 12,
-    border: '1px solid #ccc',
-    borderRadius: 5,
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  hint: {
-    fontSize: 10,
-    color: '#999',
-    lineHeight: 1.4,
-  },
-  actionRow: {
-    display: 'flex',
-    gap: 8,
-    marginTop: 4,
-  },
-  checkButton: {
-    flex: 1,
-    padding: '8px 0',
-    background: '#f0f0f0',
-    color: '#333',
-    border: '1px solid #ddd',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  saveButton: {
-    flex: 1,
-    padding: '8px 0',
-    background: '#2563eb',
-    color: '#fff',
-    border: 'none',
-    borderRadius: 6,
-    cursor: 'pointer',
-    fontSize: 13,
-    fontWeight: 500,
-  },
-  successBox: {
-    marginTop: 8,
-    padding: '8px 10px',
+  devToolsResult: {
+    marginTop: 2,
+    padding: '6px 10px',
     background: '#f0fdf4',
     border: '1px solid #bbf7d0',
     borderRadius: 6,
     fontSize: 12,
     color: '#166534',
-  },
-  errorBox: {
-    marginTop: 8,
-    padding: '8px 10px',
-    background: '#fff1f2',
-    border: '1px solid #fecdd3',
-    borderRadius: 6,
-    fontSize: 12,
-    color: '#9f1239',
-    whiteSpace: 'pre-wrap',
-    wordBreak: 'break-word',
   },
 };

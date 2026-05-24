@@ -1,0 +1,70 @@
+.jb-toast-container {
+  position: fixed !important;
+  right: 24px !important;
+  top: 24px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 8px !important;
+  align-items: flex-end !important;
+  z-index: 2147483647 !important;
+  pointer-events: none !important;
+}
+
+.jb-toast {
+  max-width: 280px;
+  max-height: 200px;
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: sans-serif;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  line-height: 1.4;
+  word-break: break-word;
+  white-space: pre-wrap;
+  border: 1px solid transparent;
+  box-sizing: border-box;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  user-select: none;
+  pointer-events: auto;
+
+  /* initial hidden state — JS animates these to visible */
+  opacity: 0;
+  transform: translateY(-12px);
+}
+
+/* ── Variants ── */
+
+.jb-toast--error {
+  background: #f8d7da;
+  color: #842029;
+  border-color: #f5c2c7;
+}
+
+.jb-toast--info {
+  background: #cff4fc;
+  color: #055160;
+  border-color: #9eeaf9;
+}
+
+/* ── Inner elements ── */
+
+.jb-toast__text {
+  flex: 1;
+}
+
+.jb-toast__close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+.jb-toast--error .jb-toast__close { color: #842029; }
+.jb-toast--info  .jb-toast__close { color: #055160; }

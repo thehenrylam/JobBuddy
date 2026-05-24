@@ -25,14 +25,14 @@ function GearIcon() {
   );
 }
 
-export default function MainView({ onSettings }: { onSettings: () => void }) {
+export default function MainView({ onSettings, onLlmSettings }: { onSettings: () => void; onLlmSettings: () => void }) {
   const [isActive, setIsActive] = useState(false);
-  const [llmConfig, setLlmConfig] = useState<{ type: string; baseUrl: string; model: string } | null>(null);
+  const [llmConfig, setLLMConfig] = useState<{ type: string; baseUrl: string; model: string } | null>(null);
 
   useEffect(() => {
     browser.storage.local.get([STORAGE_KEY, 'llmConfig']).then((result) => {
       setIsActive(result[STORAGE_KEY] ?? false);
-      setLlmConfig(result.llmConfig ?? null);
+      setLLMConfig(result.llmConfig ?? null);
     });
   }, []);
 
@@ -53,12 +53,12 @@ export default function MainView({ onSettings }: { onSettings: () => void }) {
       </header>
 
       {hasLlm ? (
-        <div className="jb-clickable" style={{ ...styles.llmActive, cursor: 'pointer' }} onClick={onSettings}>
+        <div className="jb-clickable" style={{ ...styles.llmActive, cursor: 'pointer' }} onClick={onLlmSettings}>
           <span style={styles.llmProvider}>{provider}</span>
           <span style={styles.llmModel}>{llmConfig.model || '(no model)'}</span>
         </div>
       ) : (
-        <div className="jb-clickable" style={{ ...styles.llmMissing, cursor: 'pointer' }} onClick={onSettings}>
+        <div className="jb-clickable" style={{ ...styles.llmMissing, cursor: 'pointer' }} onClick={onLlmSettings}>
           No LLM Selected
         </div>
       )}
