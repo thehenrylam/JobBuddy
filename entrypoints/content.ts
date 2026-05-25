@@ -3,7 +3,6 @@ import { createRoot } from 'react-dom/client';
 import AiButton from './ai_interface/App';
 import { detectPageType } from '../services/pageDetect';
 
-const BUTTON_OPACITY = 0.75;
 const STORAGE_KEY = 'floatingButtonVisible';
 
 export default defineContentScript({
@@ -22,7 +21,6 @@ export default defineContentScript({
       width: '264px',
       height: '124px',
       backgroundColor: '#ffffff',
-      opacity: String(BUTTON_OPACITY),
       borderRadius: '16px',
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
       zIndex: '2147483647',
@@ -37,18 +35,33 @@ export default defineContentScript({
     // Narrow drag handle — the only zone that starts panel dragging
     const dragHandle = document.createElement('div');
     Object.assign(dragHandle.style, {
-      width: '10px',
+      width: '14px',
       flexShrink: '0',
       cursor: 'grab',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      color: '#bbb',
-      fontSize: '9px',
+      color: '#94a3b8',
+      fontSize: '11px',
       letterSpacing: '-1px',
+      borderRight: '1px solid #e5e7eb',
+      transition: 'color 0.15s ease, background 0.15s ease',
     });
     dragHandle.textContent = '⋮⋮';
     panel.appendChild(dragHandle);
+
+    dragHandle.addEventListener('mouseenter', () => {
+      if (!isDragging) {
+        dragHandle.style.color = '#475569';
+        dragHandle.style.background = '#f1f5f9';
+      }
+    });
+    dragHandle.addEventListener('mouseleave', () => {
+      if (!isDragging) {
+        dragHandle.style.color = '#94a3b8';
+        dragHandle.style.background = 'transparent';
+      }
+    });
 
     dragHandle.addEventListener('mousedown', (e) => {
       isDragging = true;
