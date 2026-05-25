@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { type LLMConfig } from '../../services/llm';
+import { getSavedPosts } from '../../services/savedPosts';
+import type { DetectionResult, PageClassification } from '../../lib/jobDetect/types';
 
 const DRAFT_KEY = 'llmConfigDraft';
 
@@ -43,6 +45,16 @@ function HashtagIcon() {
   );
 }
 
+function SearchIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={1.5} stroke="currentColor" width={15} height={15}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+    </svg>
+  );
+}
+
 function ChevronIcon({ open }: { open: boolean }) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -53,15 +65,33 @@ function ChevronIcon({ open }: { open: boolean }) {
   );
 }
 
-export default function SettingsView({ onBack, onLlmSettings }: { onBack: () => void; onLlmSettings: () => void }) {
+const CLASSIFICATION_LABELS: Record<PageClassification, string> = {
+  job_post: 'Job Post',
+  job_form: 'Job Form',
+  both: 'Post + Form',
+  unknown: 'Unknown',
+};
+
+const CLASSIFICATION_COLORS: Record<PageClassification, { color: string; background: string; border: string }> = {
+  job_post: { color: '#1d4ed8', background: '#eff6ff', border: '#bfdbfe' },
+  job_form: { color: '#15803d', background: '#f0fdf4', border: '#bbf7d0' },
+  both: { color: '#7e22ce', background: '#faf5ff', border: '#e9d5ff' },
+  unknown: { color: '#6b7280', background: '#f5f5f5', border: '#e5e7eb' },
+};
+
+export default function SettingsView({ onBack, onLlmSettings, onSavedPosts }: { onBack: () => void; onLlmSettings: () => void; onSavedPosts: () => void }) {
   const [savedConfig, setSavedConfig] = useState<LLMConfig | null>(null);
+  const [savedPostCount, setSavedPostCount] = useState(0);
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [tokenEstimate, setTokenEstimate] = useState<string | null>(null);
+  const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
+  const [detecting, setDetecting] = useState(false);
 
   useEffect(() => {
     browser.storage.local.get('llmConfig').then((result) => {
       setSavedConfig(result.llmConfig ?? null);
     });
+    getSavedPosts().then((posts) => setSavedPostCount(posts.length)).catch(() => {});
   }, []);
 
   const handleClear = async () => {
@@ -93,6 +123,18 @@ export default function SettingsView({ onBack, onLlmSettings }: { onBack: () => 
     const text = results[0].result as string;
     const count = Math.ceil(text.length / 4);
     setTokenEstimate(`~${count.toLocaleString()} tokens (estimated)`);
+  };
+
+  const handleRunDetection = async () => {
+    setDetecting(true);
+    setDetectionResult(null);
+    try {
+      const [tab] = await browser.tabs.query({ active: true, currentWindow: true });
+      const result = await browser.tabs.sendMessage(tab.id!, { type: 'JB_RUN_DETECTION' }) as DetectionResult;
+      setDetectionResult(result);
+    } finally {
+      setDetecting(false);
+    }
   };
 
   return (
@@ -137,6 +179,20 @@ export default function SettingsView({ onBack, onLlmSettings }: { onBack: () => 
       </section>
 
       <section>
+        <p style={styles.sectionLabel}>Saved Posts</p>
+        <div style={styles.configCard}>
+          <div style={styles.configDetails}>
+            <span style={styles.configUrl}>{savedPostCount} saved post{savedPostCount !== 1 ? 's' : ''}</span>
+          </div>
+          <div style={styles.configActions}>
+            <button className="jb-btn-ghost" style={styles.manageButton} onClick={onSavedPosts}>
+              Manage →
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <section>
         <button style={styles.devToolsHeader} onClick={() => setDevToolsOpen(o => !o)}>
           <ChevronIcon open={devToolsOpen} />
           <span style={styles.sectionLabel}>Developer Tools</span>
@@ -161,6 +217,30 @@ export default function SettingsView({ onBack, onLlmSettings }: { onBack: () => 
             {tokenEstimate && (
               <div style={styles.devToolsResult}>{tokenEstimate}</div>
             )}
+
+            <div style={styles.devToolsRow}>
+              <button className="jb-btn-icon" style={styles.iconButton} onClick={handleRunDetection} title="Detect page type" disabled={detecting}>
+                <SearchIcon />
+              </button>
+              <span style={styles.devToolsLabel}>Detect page type</span>
+            </div>
+
+            {detectionResult && (() => {
+              const colors = CLASSIFICATION_COLORS[detectionResult.classification];
+              return (
+                <div style={{ ...styles.devToolsResult, background: colors.background, border: `1px solid ${colors.border}`, color: colors.color }}>
+                  <span style={{ fontWeight: 700 }}>{CLASSIFICATION_LABELS[detectionResult.classification]}</span>
+                  {' · '}~{detectionResult.estimatedTokens.toLocaleString()} tokens
+                  {detectionResult.signals.length > 0 && (
+                    <ul style={{ margin: '4px 0 0', paddingLeft: 14 }}>
+                      {detectionResult.signals.map((s) => (
+                        <li key={s} style={{ fontSize: 10 }}>{s}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
       </section>
@@ -272,6 +352,16 @@ const styles: Record<string, React.CSSProperties> = {
     color: '#dc2626',
     background: '#fff1f2',
     border: '1px solid #fecdd3',
+  },
+  manageButton: {
+    fontSize: 12,
+    fontWeight: 600,
+    color: '#2563eb',
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    padding: '2px 4px',
+    whiteSpace: 'nowrap',
   },
   devToolsHeader: {
     display: 'flex',

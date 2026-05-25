@@ -1,6 +1,15 @@
-import React, { useState, useRef } from 'react';
-import { llmWebpageCategorize } from '../../services/llmWebpageCategorize';
-import { showErrorToast } from './toast';
+import React, { useState, useRef, useEffect } from 'react';
+import { createJobPost } from '../../services/llmJobPost';
+import { savePost } from '../../services/savedPosts';
+import { showErrorToast, showInfoToast } from './toast';
+import StatusBadge from './StatusBadge';
+import PostDropdown from './PostDropdown';
+import type { PostDropdownHandle } from './PostDropdown';
+import { detectPageType } from '../../services/pageDetect';
+import { detectSelectedText } from '../../services/textDetect';
+import type { DetectionResult } from '../../lib/jobDetect/types';
+
+const SELECTION_DEBOUNCE_MS = 750;
 
 const baseStyle: React.CSSProperties = {
   width: '52px',
@@ -44,7 +53,37 @@ export default function AiButton() {
   const [bg, setBg] = useState('rgba(37, 99, 235, 0.08)');
   const [scale, setScale] = useState(1);
   const [isLoading, setIsLoading] = useState(false);
+  const [pageResult, setPageResult] = useState<DetectionResult | null>(null);
+  const [selectionResult, setSelectionResult] = useState<DetectionResult | null>(null);
+  const [selectionText, setSelectionText] = useState('');
+  const [selectedPostId, setSelectedPostId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dropdownRef = useRef<PostDropdownHandle | null>(null);
+
+  useEffect(() => {
+    detectPageType().then(setPageResult).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const update = () => {
+      const text = window.getSelection()?.toString().trim() ?? '';
+      setSelectionText(text);
+      if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+      if (!text) {
+        setSelectionResult(null);
+      } else {
+        selectionTimerRef.current = setTimeout(() => {
+          setSelectionResult(detectSelectedText(text));
+        }, SELECTION_DEBOUNCE_MS);
+      }
+    };
+    document.addEventListener('selectionchange', update);
+    return () => {
+      document.removeEventListener('selectionchange', update);
+      if (selectionTimerRef.current) clearTimeout(selectionTimerRef.current);
+    };
+  }, []);
 
   const handleClick = async () => {
     if (isLoading) {
@@ -59,7 +98,10 @@ export default function AiButton() {
     setIsLoading(true);
 
     try {
-      await llmWebpageCategorize(controller.signal);
+      const post = await createJobPost({ signal: controller.signal, text: selectionText || undefined });
+      await savePost(post);
+      dropdownRef.current?.refresh();
+      showInfoToast('Post saved');
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return; // user cancelled, no toast
       showErrorToast(err instanceof Error ? err.message : String(err));
@@ -70,15 +112,21 @@ export default function AiButton() {
   };
 
   return (
-    <button
-      style={{ ...baseStyle, background: bg, transform: `scale(${scale})` }}
-      onMouseEnter={() => setBg('rgba(37, 99, 235, 0.16)')}
-      onMouseLeave={() => { setBg('rgba(37, 99, 235, 0.08)'); setScale(1); }}
-      onMouseDown={(e) => { e.stopPropagation(); setBg('rgba(37, 99, 235, 0.28)'); setScale(0.92); }}
-      onMouseUp={() => { setBg('rgba(37, 99, 235, 0.16)'); setScale(1); }}
-      onClick={handleClick}
-    >
-      {isLoading ? <SpinnerIcon /> : <StarIcon />}
-    </button>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
+      <PostDropdown ref={dropdownRef} selectedId={selectedPostId} onSelect={setSelectedPostId} />
+      <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '0 10px', gap: 8 }}>
+        <StatusBadge result={selectionResult ?? pageResult} isSelection={!!selectionResult} />
+        <button
+          style={{ ...baseStyle, background: bg, transform: `scale(${scale})`, flexShrink: 0 }}
+          onMouseEnter={() => setBg('rgba(37, 99, 235, 0.16)')}
+          onMouseLeave={() => { setBg('rgba(37, 99, 235, 0.08)'); setScale(1); }}
+          onMouseDown={(e) => { e.stopPropagation(); setBg('rgba(37, 99, 235, 0.28)'); setScale(0.92); }}
+          onMouseUp={() => { setBg('rgba(37, 99, 235, 0.16)'); setScale(1); }}
+          onClick={handleClick}
+        >
+          {isLoading ? <SpinnerIcon /> : <StarIcon />}
+        </button>
+      </div>
+    </div>
   );
 }
