@@ -19,7 +19,6 @@ export default defineContentScript({
       right: '24px',
       bottom: '24px',
       width: '264px',
-      height: '124px',
       backgroundColor: '#ffffff',
       borderRadius: '16px',
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',

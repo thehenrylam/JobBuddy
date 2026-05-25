@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createJobPost } from '../../services/llmJobPost';
 import { savePost } from '../../services/savedPosts';
+import DownloadBar from './DownloadBar';
 import { showErrorToast, showInfoToast } from './toast';
 import StatusBadge from './StatusBadge';
 import PostDropdown from './PostDropdown';
@@ -112,9 +113,10 @@ export default function AiButton() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', height: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
+    <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
       <PostDropdown ref={dropdownRef} selectedId={selectedPostId} onSelect={setSelectedPostId} />
-      <div style={{ display: 'flex', alignItems: 'center', flex: 1, padding: '0 10px', gap: 8 }}>
+      {selectedPostId && <DownloadBar postId={selectedPostId} />}
+      <div style={{ display: 'flex', alignItems: 'center', height: '86px', flexShrink: 0, padding: '0 10px', gap: 8 }}>
         <StatusBadge result={selectionResult ?? pageResult} isSelection={!!selectionResult} />
         <button
           style={{ ...baseStyle, background: bg, transform: `scale(${scale})`, flexShrink: 0 }}
