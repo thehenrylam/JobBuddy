@@ -102,6 +102,7 @@ export default function AiButton() {
       const post = await createJobPost({ signal: controller.signal, text: selectionText || undefined });
       await savePost(post);
       dropdownRef.current?.refresh();
+      setSelectedPostId(post.id);
       showInfoToast('Post saved');
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return; // user cancelled, no toast
@@ -114,8 +115,8 @@ export default function AiButton() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
-      <PostDropdown ref={dropdownRef} selectedId={selectedPostId} onSelect={setSelectedPostId} />
       {selectedPostId && <DownloadBar postId={selectedPostId} />}
+      <PostDropdown ref={dropdownRef} selectedId={selectedPostId} onSelect={setSelectedPostId} />
       <div style={{ display: 'flex', alignItems: 'center', height: '86px', flexShrink: 0, padding: '0 10px', gap: 8 }}>
         <StatusBadge result={selectionResult ?? pageResult} isSelection={!!selectionResult} />
         <button

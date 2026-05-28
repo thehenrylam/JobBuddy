@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { getSavedPosts } from '../../services/savedPosts';
 import type { JobPost } from '../../lib/jobPost/types';
 
@@ -53,6 +53,9 @@ function buildFilename(post: JobPost): string {
 }
 
 export default function DownloadBar({ postId }: { postId: string }) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
   const handleDownload = async () => {
     const posts = await getSavedPosts();
     const post = posts.find((p) => p.id === postId);
@@ -70,9 +73,19 @@ export default function DownloadBar({ postId }: { postId: string }) {
     URL.revokeObjectURL(url);
   };
 
+  const btnBg = pressed ? '#1e40af' : hovered ? '#1d4ed8' : '#2563eb';
+  const btnTransform = pressed ? 'scale(0.97)' : 'scale(1)';
+
   return (
     <div style={styles.bar}>
-      <button style={styles.btn} onClick={handleDownload}>
+      <button
+        style={{ ...styles.btn, background: btnBg, transform: btnTransform }}
+        onClick={handleDownload}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => { setHovered(false); setPressed(false); }}
+        onMouseDown={() => setPressed(true)}
+        onMouseUp={() => setPressed(false)}
+      >
         <DownloadIcon />
         <span>Download Post</span>
       </button>
@@ -84,27 +97,27 @@ const styles: Record<string, React.CSSProperties> = {
   bar: {
     display: 'flex',
     alignItems: 'center',
-    padding: '0 10px',
-    height: 34,
+    // 8px horizontal matches PostDropdown's wrapper padding — button aligns with the search bar
+    padding: '4px 8px',
     flexShrink: 0,
     background: '#eff6ff',
-    borderTop: '1px solid #bfdbfe',
     borderBottom: '1px solid #bfdbfe',
   },
   btn: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: 5,
-    background: '#2563eb',
+    width: '100%',
     color: '#ffffff',
     border: 'none',
-    borderRadius: 5,
-    padding: '0 9px',
-    height: 24,
+    borderRadius: 6,
+    height: 26,
     fontSize: 11,
     fontFamily: 'sans-serif',
     fontWeight: 600,
     cursor: 'pointer',
     letterSpacing: '0.01em',
+    transition: 'background 0.12s ease, transform 0.08s ease',
   },
 };
