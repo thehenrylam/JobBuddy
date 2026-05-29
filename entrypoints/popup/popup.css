@@ -52,6 +52,22 @@
   filter: brightness(0.86);
 }
 
+/* About User processing badge — animated blue pulse */
+.jb-about-processing {
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+@keyframes jb-about-pulse {
+  0%, 100% { background-color: #eff6ff; border-color: #bfdbfe; }
+  50%       { background-color: #dbeafe; border-color: #93c5fd; }
+}
+
+.jb-about-processing {
+  animation: jb-about-pulse 1.8s ease-in-out infinite;
+}
+
 /* Text inputs */
 .jb-input:focus {
   outline: none;

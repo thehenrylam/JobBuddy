@@ -1,24 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   getResumeFile,
-  saveResumeFile,
   clearResumeFile,
   getUserPromptFile,
-  saveUserPromptFile,
   resetUserPromptToDefault,
   getAboutUser,
-  saveAboutUser,
-  clearAboutUser,
   getSourceHash,
-  saveSourceHash,
-  clearSourceHash,
+  getParseStatus,
   computeHash,
 } from '../../services/aboutUser';
-import { extractText } from '../../services/fileExtract';
-import { parseAboutUser } from '../../services/llmAboutUser';
-import type { ResumeFile, UserPromptFile, AboutUser, AboutUserStatus, SourceHash } from '../../lib/aboutUser/types';
-
-const DEBOUNCE_MS = 5000;
+import type { ResumeFile, UserPromptFile, AboutUser, AboutUserStatus, SourceHash, ParseStatus } from '../../lib/aboutUser/types';
 
 function downloadBlob(blob: Blob, filename: string) {
   const url = URL.createObjectURL(blob);
@@ -45,6 +36,38 @@ function DownloadIcon() {
       strokeWidth={1.5} stroke="currentColor" width={14} height={14}>
       <path strokeLinecap="round" strokeLinejoin="round"
         d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M16.5 12 12 16.5m0 0L7.5 12m4.5 4.5V3" />
+    </svg>
+  );
+}
+
+function SparkleIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456ZM16.894 20.567 16.5 21.75l-.394-1.183a2.25 2.25 0 0 0-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 0 0 1.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 0 0 1.423 1.423l1.183.394-1.183.394a2.25 2.25 0 0 0-1.423 1.423Z" />
+    </svg>
+  );
+}
+
+function HourglassIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+      strokeWidth={1.5} stroke="currentColor" width={16} height={16}>
+      <path strokeLinecap="round" strokeLinejoin="round"
+        d="M5 3h14M5 21h14M6 3v4l6 5-6 5v4M18 3v4l-6 5 6 5v4" />
+    </svg>
+  );
+}
+
+function ParseSpinnerIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" width={16} height={16} viewBox="0 0 24 24" fill="none">
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+        <animateTransform attributeName="transform" type="rotate"
+          from="0 12 12" to="360 12 12" dur="0.75s" repeatCount="indefinite" />
+      </path>
     </svg>
   );
 }
@@ -77,16 +100,15 @@ function StatusDot({ status }: { status: AboutUserStatus }) {
 }
 
 function deriveStatus(
-  isWorking: boolean,
-  isWaiting: boolean,
+  parseStatus: ParseStatus,
   resume: ResumeFile | null,
   userPrompt: UserPromptFile | null,
   aboutUser: AboutUser | null,
 ): AboutUserStatus {
-  if (isWorking) return 'working';
-  if (isWaiting) return 'waiting';
-  if (!resume && !userPrompt) return 'critical';
-  if (!aboutUser || (!aboutUser.name && aboutUser.skills.length === 0)) return 'caution';
+  if (parseStatus === 'working') return 'working';
+  if (parseStatus === 'waiting') return 'waiting';
+  if (!resume || !userPrompt) return 'critical';
+  if (!aboutUser || (!aboutUser.first_name && !aboutUser.last_name && aboutUser.skills.length === 0)) return 'caution';
   return 'okay';
 }
 
@@ -94,8 +116,7 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
   const [resume, setResume] = useState<ResumeFile | null>(null);
   const [userPrompt, setUserPrompt] = useState<UserPromptFile | null>(null);
   const [aboutUser, setAboutUser] = useState<AboutUser | null>(null);
-  const [isWorking, setIsWorking] = useState(false);
-  const [isWaiting, setIsWaiting] = useState(false);
+  const [parseStatus, setParseStatus] = useState<ParseStatus>('idle');
   const [error, setError] = useState<string | null>(null);
   const [promptExpanded, setPromptExpanded] = useState(false);
 
@@ -105,150 +126,50 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
   const [currentResumeHash, setCurrentResumeHash] = useState<string | null>(null);
   const [currentPromptHash, setCurrentPromptHash] = useState<string | null>(null);
 
-  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const abortRef = useRef<AbortController | null>(null);
-  const extractingRef = useRef(false);
-
-  // Refs kept in sync so async callbacks always see current values.
-  const resumeRef = useRef<ResumeFile | null>(null);
-  const userPromptRef = useRef<UserPromptFile | null>(null);
-  const sourceHashRef = useRef<SourceHash | null>(null);
-
   const setResumeSync = (r: ResumeFile | null) => {
-    resumeRef.current = r;
     setResume(r);
     setCurrentResumeHash(r ? computeHash(r.base64) : null);
   };
   const setUserPromptSync = (u: UserPromptFile | null) => {
-    userPromptRef.current = u;
     setUserPrompt(u);
     setCurrentPromptHash(u ? computeHash(u.content) : null);
-  };
-  const setSourceHashSync = (h: SourceHash | null) => {
-    sourceHashRef.current = h;
-    setSourceHash(h);
-  };
-
-  // Clear the parsed About User and its source fingerprints (called when source files change).
-  const invalidateAboutUser = async () => {
-    await Promise.all([clearAboutUser(), clearSourceHash()]);
-    setAboutUser(null);
-    setSourceHashSync(null);
-  };
-
-  // ─── parse helpers ───────────────────────────────────────────────────────────
-
-  const runParse = async (resumeArg: ResumeFile | null, promptArg: UserPromptFile | null) => {
-    setIsWaiting(false);
-    setIsWorking(true);
-    setError(null);
-    const ctrl = new AbortController();
-    abortRef.current = ctrl;
-    try {
-      const result = await parseAboutUser(resumeArg?.text ?? null, promptArg?.content ?? null, ctrl.signal);
-      await saveAboutUser(result);
-      const newHash: SourceHash = {
-        resumeHash: resumeArg ? computeHash(resumeArg.base64) : null,
-        promptHash: promptArg ? computeHash(promptArg.content) : null,
-      };
-      await saveSourceHash(newHash);
-      setSourceHashSync(newHash);
-      setAboutUser(result);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return;
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setIsWorking(false);
-      abortRef.current = null;
-    }
-  };
-
-  const scheduleParse = (resumeArg: ResumeFile | null, promptArg: UserPromptFile | null) => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    abortRef.current?.abort();
-    setIsWaiting(true);
-    debounceRef.current = setTimeout(() => runParse(resumeArg, promptArg), DEBOUNCE_MS);
-  };
-
-  // Extract text from a raw binary resume file (PDF/DOCX), save, then schedule parse.
-  const extractAndSchedule = async (rf: ResumeFile, promptArg: UserPromptFile | null) => {
-    if (extractingRef.current) return;
-    extractingRef.current = true;
-    setIsWorking(true);
-    try {
-      const bytes = Uint8Array.from(atob(rf.base64), c => c.charCodeAt(0));
-      const blob = new Blob([bytes], { type: rf.mimeType || 'application/octet-stream' });
-      const file = new File([blob], rf.filename, { type: rf.mimeType || 'application/octet-stream' });
-      const text = await extractText(file);
-      const updated = { ...rf, text };
-      await saveResumeFile(updated);
-      setResumeSync(updated);
-      scheduleParse(updated, promptArg);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setIsWorking(false);
-      extractingRef.current = false;
-    }
   };
 
   // ─── effects ─────────────────────────────────────────────────────────────────
 
   useEffect(() => {
     // Initial load
-    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser(), getSourceHash()]).then(([r, u, a, h]) => {
-      setResumeSync(r);
-      setUserPromptSync(u);
-      setAboutUser(a);
-      setSourceHashSync(h);
-      // Resume stored without text (binary file saved while popup was closed) — extract now.
-      if (r && !r.text) extractAndSchedule(r, u);
-    });
+    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser(), getSourceHash(), getParseStatus()])
+      .then(([r, u, a, h, ps]) => {
+        setResumeSync(r);
+        setUserPromptSync(u);
+        setAboutUser(a);
+        setSourceHash(h);
+        setParseStatus(ps ?? 'idle');
+      });
 
-    // Live storage updates (e.g. background saved a new file while popup is open)
+    // Mirror storage changes made by the background script.
     const onStorageChange = (changes: Record<string, browser.storage.StorageChange>, area: string) => {
       if (area !== 'local') return;
-
       if ('resumeFile' in changes) {
-        const newR = (changes.resumeFile.newValue ?? null) as ResumeFile | null;
-        (async () => {
-          // If the file content changed, the cached parse result is stale — clear it.
-          if (sourceHashRef.current?.resumeHash != null) {
-            const newH = newR ? computeHash(newR.base64) : null;
-            if (newH !== sourceHashRef.current.resumeHash) await invalidateAboutUser();
-          }
-          setResumeSync(newR);
-          if (newR && !newR.text) {
-            extractAndSchedule(newR, userPromptRef.current);
-          } else {
-            scheduleParse(newR, userPromptRef.current);
-          }
-        })().catch(console.error);
+        setResumeSync((changes.resumeFile.newValue ?? null) as ResumeFile | null);
       }
-
       if ('userPromptFile' in changes) {
-        const newU = (changes.userPromptFile.newValue ?? null) as UserPromptFile | null;
-        (async () => {
-          if (sourceHashRef.current?.promptHash != null) {
-            const newH = newU ? computeHash(newU.content) : null;
-            if (newH !== sourceHashRef.current.promptHash) await invalidateAboutUser();
-          }
-          setUserPromptSync(newU);
-          scheduleParse(resumeRef.current, newU);
-        })().catch(console.error);
+        setUserPromptSync((changes.userPromptFile.newValue ?? null) as UserPromptFile | null);
       }
-
       if ('aboutUser' in changes) {
         setAboutUser((changes.aboutUser.newValue ?? null) as AboutUser | null);
+      }
+      if ('aboutUserSourceHash' in changes) {
+        setSourceHash((changes.aboutUserSourceHash.newValue ?? null) as SourceHash | null);
+      }
+      if ('aboutUserParseStatus' in changes) {
+        setParseStatus((changes.aboutUserParseStatus.newValue ?? 'idle') as ParseStatus);
       }
     };
 
     browser.storage.onChanged.addListener(onStorageChange);
-    return () => {
-      browser.storage.onChanged.removeListener(onStorageChange);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      abortRef.current?.abort();
-    };
+    return () => browser.storage.onChanged.removeListener(onStorageChange);
   }, []);
 
   // ─── upload handlers ──────────────────────────────────────────────────────────
@@ -281,7 +202,7 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
   const handleResumeClear = async () => {
     await clearResumeFile();
     setResumeSync(null);
-    await invalidateAboutUser();
+    // Background handles cache invalidation and parse cancellation via storage.onChanged.
   };
 
   const handlePromptDownload = () => {
@@ -291,22 +212,18 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
 
   const handleResetToDefault = async () => {
     await resetUserPromptToDefault();
-    const uf = await getUserPromptFile();
-    if (sourceHashRef.current?.promptHash != null) {
-      const newH = uf ? computeHash(uf.content) : null;
-      if (newH !== sourceHashRef.current.promptHash) await invalidateAboutUser();
+    // Background handles invalidation and scheduling via storage.onChanged.
+  };
+
+  const handleReparseOrCancel = () => {
+    if (parseStatus === 'waiting' || parseStatus === 'working') {
+      browser.runtime.sendMessage({ type: 'JB_PARSE_CANCEL' }).catch(console.error);
+    } else {
+      browser.runtime.sendMessage({ type: 'JB_PARSE_NOW' }).catch(console.error);
     }
-    setUserPromptSync(uf);
-    scheduleParse(resumeRef.current, uf);
   };
 
-  const handleReparseNow = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-    setIsWaiting(false);
-    runParse(resume, userPrompt);
-  };
-
-  const status = deriveStatus(isWorking, isWaiting, resume, userPrompt, aboutUser);
+  const status = deriveStatus(parseStatus, resume, userPrompt, aboutUser);
 
   // Card color coding: green = parsed with current sources, blue = has data but stale/unparsed
   const resumeIsFresh = resume !== null && aboutUser !== null
@@ -412,21 +329,43 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
       <section>
         <div style={styles.previewHeader}>
           <p style={{ ...styles.sectionLabel, margin: 0 }}>About User</p>
-          <button
-            className="jb-btn-ghost"
-            style={styles.reparseBtn}
-            onClick={handleReparseNow}
-            disabled={isWorking || (!resume && !userPrompt)}
-          >
-            {isWorking ? 'Parsing…' : 'Re-parse now'}
-          </button>
+          {(() => {
+            const isActive = parseStatus === 'waiting' || parseStatus === 'working';
+            const isDisabled = parseStatus === 'idle' && !(resume && userPrompt);
+            return (
+              <button
+                className="jb-btn-icon"
+                title={parseStatus === 'waiting' ? 'Cancel waiting' : parseStatus === 'working' ? 'Cancel parsing' : 'Parse profile'}
+                style={{
+                  ...styles.parseBtn,
+                  color: isActive ? '#dc2626' : '#2563eb',
+                  opacity: isDisabled ? 0.35 : 1,
+                  cursor: isDisabled ? 'not-allowed' : 'pointer',
+                }}
+                onClick={handleReparseOrCancel}
+                disabled={isDisabled}
+              >
+                {parseStatus === 'waiting' ? <HourglassIcon /> : parseStatus === 'working' ? <ParseSpinnerIcon /> : <SparkleIcon />}
+              </button>
+            );
+          })()}
         </div>
         <div style={{ ...styles.card, ...cardColorStyle(aboutUserCardColor) }}>
-          {aboutUser ? (
+          {aboutUser ? (() => {
+              const displayName = [
+                aboutUser.preferred_first_name ?? aboutUser.first_name,
+                aboutUser.preferred_last_name ?? aboutUser.last_name,
+              ].filter(Boolean).join(' ');
+              const location = [
+                aboutUser.city_of_residence,
+                aboutUser.state_of_residence,
+                aboutUser.country_of_residence,
+              ].filter(Boolean).join(', ');
+              return (
             <div style={styles.profilePreview}>
-              {aboutUser.name && <div style={styles.profileName}>{aboutUser.name}</div>}
-              {aboutUser.email && <div style={styles.profileDetail}>{aboutUser.email}</div>}
-              {aboutUser.location && <div style={styles.profileDetail}>{aboutUser.location}</div>}
+              {displayName && <div style={styles.profileName}>{displayName}</div>}
+              {aboutUser.email_address && <div style={styles.profileDetail}>{aboutUser.email_address}</div>}
+              {location && <div style={styles.profileDetail}>{location}</div>}
               {aboutUser.skills.length > 0 && (
                 <div style={styles.profileDetail}>
                   <span style={styles.fieldLabel}>Skills: </span>
@@ -446,7 +385,8 @@ export default function AboutUserSettingsView({ onBack }: { onBack: () => void }
                 </div>
               )}
             </div>
-          ) : (
+              );
+            })() : (
             <span style={styles.emptyText}>Not yet parsed</span>
           )}
         </div>
@@ -601,14 +541,17 @@ const styles: Record<string, React.CSSProperties> = {
     justifyContent: 'space-between',
     marginBottom: 8,
   },
-  reparseBtn: {
-    fontSize: 11,
-    fontWeight: 600,
-    color: '#2563eb',
+  parseBtn: {
+    width: 28,
+    height: 28,
     background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    padding: '2px 4px',
+    border: '1px solid #ddd',
+    borderRadius: 6,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    padding: 0,
   },
   profilePreview: {
     display: 'flex',

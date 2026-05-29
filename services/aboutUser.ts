@@ -1,9 +1,10 @@
-import type { ResumeFile, UserPromptFile, AboutUser, SourceHash } from '../lib/aboutUser/types';
+import type { ResumeFile, UserPromptFile, AboutUser, SourceHash, ParseStatus } from '../lib/aboutUser/types';
 
 const RESUME_KEY = 'resumeFile';
 const USER_PROMPT_KEY = 'userPromptFile';
 const ABOUT_USER_KEY = 'aboutUser';
 const SOURCE_HASH_KEY = 'aboutUserSourceHash';
+const PARSE_STATUS_KEY = 'aboutUserParseStatus';
 
 // Sampled djb2 hash — fast even on multi-MB base64 strings.
 // Samples up to ~4 096 characters plus includes the total length so files
@@ -88,4 +89,17 @@ export async function saveSourceHash(h: SourceHash): Promise<void> {
 
 export async function clearSourceHash(): Promise<void> {
   await browser.storage.local.remove(SOURCE_HASH_KEY);
+}
+
+export async function getParseStatus(): Promise<ParseStatus | null> {
+  const result = await browser.storage.local.get(PARSE_STATUS_KEY);
+  return (result[PARSE_STATUS_KEY] as ParseStatus) ?? null;
+}
+
+export async function saveParseStatus(s: ParseStatus): Promise<void> {
+  await browser.storage.local.set({ [PARSE_STATUS_KEY]: s });
+}
+
+export async function clearParseStatus(): Promise<void> {
+  await browser.storage.local.remove(PARSE_STATUS_KEY);
 }

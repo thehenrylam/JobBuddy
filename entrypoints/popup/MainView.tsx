@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { getResumeFile, getUserPromptFile, getAboutUser } from '../../services/aboutUser';
+import { getResumeFile, getUserPromptFile, getAboutUser, getParseStatus } from '../../services/aboutUser';
+import type { ResumeFile, UserPromptFile, AboutUser, ParseStatus } from '../../lib/aboutUser/types';
 
 const VERSION = browser.runtime.getManifest().version;
 const STORAGE_KEY = 'floatingButtonVisible';
@@ -29,32 +30,30 @@ function GearIcon() {
 export default function MainView({ onSettings, onLlmSettings, onAboutUser }: { onSettings: () => void; onLlmSettings: () => void; onAboutUser: () => void }) {
   const [isActive, setIsActive] = useState(false);
   const [llmConfig, setLLMConfig] = useState<{ type: string; baseUrl: string; model: string } | null>(null);
-  const [aboutLabel, setAboutLabel] = useState<string | null>(null);
-  const [aboutHasFiles, setAboutHasFiles] = useState(false);
-
-  const loadAboutUser = () => {
-    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser()]).then(([resume, userPrompt, aboutUser]) => {
-      const hasFiles = !!(resume || userPrompt);
-      setAboutHasFiles(hasFiles);
-      if (!hasFiles) { setAboutLabel(null); return; }
-      const filenames = [resume?.filename, userPrompt?.filename].filter(Boolean).join(', ');
-      const name = aboutUser?.name;
-      setAboutLabel(name ? `${name}${filenames ? ` · ${filenames}` : ''}` : filenames);
-    }).catch(() => {});
-  };
+  const [resume, setResume] = useState<ResumeFile | null>(null);
+  const [userPrompt, setUserPrompt] = useState<UserPromptFile | null>(null);
+  const [aboutUser, setAboutUser] = useState<AboutUser | null>(null);
+  const [parseStatus, setParseStatus] = useState<ParseStatus>('idle');
 
   useEffect(() => {
     browser.storage.local.get([STORAGE_KEY, 'llmConfig']).then((result) => {
       setIsActive(result[STORAGE_KEY] ?? false);
       setLLMConfig(result.llmConfig ?? null);
     });
-    loadAboutUser();
+
+    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser(), getParseStatus()]).then(([r, u, a, ps]) => {
+      setResume(r);
+      setUserPrompt(u);
+      setAboutUser(a);
+      setParseStatus(ps ?? 'idle');
+    }).catch(() => {});
 
     const onStorageChange = (changes: Record<string, browser.storage.StorageChange>, area: string) => {
       if (area !== 'local') return;
-      if ('resumeFile' in changes || 'userPromptFile' in changes || 'aboutUser' in changes) {
-        loadAboutUser();
-      }
+      if ('resumeFile' in changes) setResume((changes.resumeFile.newValue ?? null) as ResumeFile | null);
+      if ('userPromptFile' in changes) setUserPrompt((changes.userPromptFile.newValue ?? null) as UserPromptFile | null);
+      if ('aboutUser' in changes) setAboutUser((changes.aboutUser.newValue ?? null) as AboutUser | null);
+      if ('aboutUserParseStatus' in changes) setParseStatus((changes.aboutUserParseStatus.newValue ?? 'idle') as ParseStatus);
     };
     browser.storage.onChanged.addListener(onStorageChange);
     return () => browser.storage.onChanged.removeListener(onStorageChange);
@@ -68,6 +67,28 @@ export default function MainView({ onSettings, onLlmSettings, onAboutUser }: { o
 
   const hasLlm = llmConfig != null;
   const provider = hasLlm ? inferProvider(llmConfig) : null;
+
+  // ── About User badge state ────────────────────────────────────────────────────
+
+  const hasSources = !!(resume && userPrompt);
+  const isProcessing = parseStatus === 'waiting' || parseStatus === 'working';
+  const isParsed = !!aboutUser;
+
+  const filenames = [resume?.filename, userPrompt?.filename].filter(Boolean).join(', ');
+  const displayName = aboutUser
+    ? [aboutUser.preferred_first_name ?? aboutUser.first_name, aboutUser.preferred_last_name ?? aboutUser.last_name]
+        .filter(Boolean).join(' ') || null
+    : null;
+  const parsedLabel = displayName
+    ? `${displayName}${filenames ? ` · ${filenames}` : ''}`
+    : filenames;
+
+  type BadgeVariant = 'missing' | 'unparsed' | 'processing' | 'parsed';
+  const badgeVariant: BadgeVariant =
+    !hasSources ? 'missing' :
+    isProcessing ? 'processing' :
+    !isParsed    ? 'unparsed'   :
+                   'parsed';
 
   return (
     <div style={styles.container}>
@@ -87,13 +108,36 @@ export default function MainView({ onSettings, onLlmSettings, onAboutUser }: { o
         </div>
       )}
 
-      {aboutHasFiles ? (
-        <div className="jb-clickable" style={{ ...styles.aboutActive, cursor: 'pointer' }} onClick={onAboutUser}>
-          <span style={styles.aboutLabel}>{aboutLabel}</span>
-        </div>
-      ) : (
+      {/* About User badge — 4 states */}
+      {badgeVariant === 'missing' && (
         <div className="jb-clickable" style={{ ...styles.aboutMissing, cursor: 'pointer' }} onClick={onAboutUser}>
-          No Profile
+          No Profile — Add resume or prompt
+        </div>
+      )}
+
+      {badgeVariant === 'unparsed' && (
+        <div className="jb-clickable" style={{ ...styles.aboutUnparsed, cursor: 'pointer' }} onClick={onAboutUser}>
+          <span style={styles.aboutUnparsedFiles}>{filenames}</span>
+          <span style={styles.aboutUnparsedTag}>Not parsed</span>
+        </div>
+      )}
+
+      {badgeVariant === 'processing' && (
+        <div
+          className="jb-clickable jb-about-processing"
+          style={styles.aboutProcessing}
+          onClick={onAboutUser}
+        >
+          <span style={styles.aboutProcessingDot} />
+          <span style={styles.aboutProcessingText}>
+            {parseStatus === 'waiting' ? 'Waiting to parse…' : 'Parsing profile…'}
+          </span>
+        </div>
+      )}
+
+      {badgeVariant === 'parsed' && (
+        <div className="jb-clickable" style={{ ...styles.aboutParsed, cursor: 'pointer' }} onClick={onAboutUser}>
+          <span style={styles.aboutParsedLabel}>{parsedLabel}</span>
         </div>
       )}
 
@@ -168,6 +212,7 @@ const styles: Record<string, React.CSSProperties> = {
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  // Red — no sources at all
   aboutMissing: {
     fontSize: 12,
     fontWeight: 500,
@@ -177,7 +222,66 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     padding: '8px 10px',
   },
-  aboutActive: {
+  // Yellow — sources present but not yet parsed
+  aboutUnparsed: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    backgroundColor: '#fffbeb',
+    border: '1px solid #fcd34d',
+    borderRadius: 6,
+    padding: '8px 10px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  aboutUnparsedFiles: {
+    fontSize: 12,
+    color: '#92400e',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+    flex: 1,
+  },
+  aboutUnparsedTag: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: '#b45309',
+    backgroundColor: '#fef3c7',
+    border: '1px solid #fcd34d',
+    borderRadius: 4,
+    padding: '1px 5px',
+    flexShrink: 0,
+    whiteSpace: 'nowrap' as const,
+  },
+  // Blue pulsing — waiting/working (colors driven by .jb-about-processing CSS)
+  aboutProcessing: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 7,
+    borderWidth: 1,
+    borderStyle: 'solid',
+    borderRadius: 6,
+    padding: '8px 10px',
+    overflow: 'hidden',
+    cursor: 'pointer',
+  },
+  aboutProcessingDot: {
+    width: 7,
+    height: 7,
+    borderRadius: '50%',
+    backgroundColor: '#3b82f6',
+    flexShrink: 0,
+  },
+  aboutProcessingText: {
+    fontSize: 12,
+    fontWeight: 500,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
+  },
+  // Green — parsed and ready
+  aboutParsed: {
     display: 'flex',
     alignItems: 'center',
     backgroundColor: '#f0fdf4',
@@ -185,8 +289,9 @@ const styles: Record<string, React.CSSProperties> = {
     borderRadius: 6,
     padding: '8px 10px',
     overflow: 'hidden',
+    cursor: 'pointer',
   },
-  aboutLabel: {
+  aboutParsedLabel: {
     fontSize: 12,
     color: '#166534',
     overflow: 'hidden',

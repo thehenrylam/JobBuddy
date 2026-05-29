@@ -2,6 +2,7 @@ import React from 'react';
 import { createRoot } from 'react-dom/client';
 import AiButton from './ai_interface/App';
 import { detectPageType } from '../services/pageDetect';
+import { showInfoToast, showErrorToast, showProgressToast, updateProgressToast, resolveProgressToast, dismissProgressToast } from './ai_interface/toast';
 
 const STORAGE_KEY = 'floatingButtonVisible';
 
@@ -104,7 +105,7 @@ export default defineContentScript({
       panel.style.cursor = 'default';
     });
 
-    document.body.appendChild(panel);
+    document.documentElement.appendChild(panel);
 
     const result = await browser.storage.local.get(STORAGE_KEY);
     panel.style.display = result[STORAGE_KEY] ? 'flex' : 'none';
@@ -118,6 +119,34 @@ export default defineContentScript({
       if (msg?.type === 'JB_RUN_DETECTION') {
         detectPageType().then(sendResponse);
         return true;
+      }
+      if (msg?.type === 'JB_TOAST') {
+        if (msg.variant === 'error') showErrorToast(msg.message);
+        else showInfoToast(msg.message);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'JB_TOAST_START') {
+        showProgressToast(msg.id, msg.message, () => {
+          browser.runtime.sendMessage({ type: 'JB_PARSE_CANCEL' }).catch(console.error);
+        });
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'JB_TOAST_UPDATE') {
+        updateProgressToast(msg.id, msg.message);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'JB_TOAST_RESOLVE') {
+        resolveProgressToast(msg.id, msg.message, msg.variant);
+        sendResponse({ ok: true });
+        return false;
+      }
+      if (msg?.type === 'JB_TOAST_DISMISS') {
+        dismissProgressToast(msg.id);
+        sendResponse({ ok: true });
+        return false;
       }
     });
   },
