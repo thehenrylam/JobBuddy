@@ -84,3 +84,45 @@ export async function callLLM(params: CallLLMParams): Promise<string> {
   const config = stored.llmConfig as LLMConfig;
   return callLLMWithConfig(config, params);
 }
+
+export interface ChatLLMMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+// Multi-turn chat call. Prepends the system prompt then sends the full message history.
+export async function callLLMChat({
+  systemPrompt,
+  messages,
+  max_tokens = 8192,
+  temperature = 0.7,
+  signal,
+}: {
+  systemPrompt: string;
+  messages: ChatLLMMessage[];
+  max_tokens?: number;
+  temperature?: number;
+  signal?: AbortSignal;
+}): Promise<string> {
+  const stored = await browser.storage.local.get('llmConfig');
+  const config = stored.llmConfig as LLMConfig;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.apiKey) headers['Authorization'] = `Bearer ${config.apiKey}`;
+
+  const allMessages = [{ role: 'system', content: systemPrompt }, ...messages];
+
+  const response = await fetch(resolveUrl(config), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ model: config.model || undefined, messages: allMessages, max_tokens, temperature }),
+    signal,
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`HTTP ${response.status}: ${text}`);
+  }
+
+  const result = await response.json();
+  return result.choices[0].message.content as string;
+}

@@ -1,3 +1,9 @@
+/* Use OS-native selection colors inside the panel, overriding any host-page ::selection rules */
+[data-jb-panel] ::selection {
+  background-color: highlight !important;
+  color: highlighttext !important;
+}
+
 .jb-toast-container {
   position: fixed !important;
   right: 24px !important;

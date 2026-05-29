@@ -1,3 +1,9 @@
+export interface FitAnalysis {
+  score: string;
+  comment: string;
+  alert: string[];
+}
+
 export interface JobPost {
   id: string;
   name: string;
@@ -9,4 +15,5 @@ export interface JobPost {
   date: string;
   keywords: string[];
   post_data: string;
+  fitAnalysis?: FitAnalysis;
 }

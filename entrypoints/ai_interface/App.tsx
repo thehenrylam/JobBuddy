@@ -1,11 +1,14 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createJobPost } from '../../services/llmJobPost';
-import { savePost } from '../../services/savedPosts';
-import DownloadBar from './DownloadBar';
+import { savePost, updatePost } from '../../services/savedPosts';
+import { getResumeFile, getUserPromptFile } from '../../services/aboutUser';
+import { analyzeFit } from '../../services/llmJobFit';
 import { showErrorToast, showInfoToast } from './toast';
 import StatusBadge from './StatusBadge';
 import PostDropdown from './PostDropdown';
+import ChatPanel from './ChatPanel';
 import type { PostDropdownHandle } from './PostDropdown';
+import type { ChatPanelHandle } from './ChatPanel';
 import { detectPageType } from '../../services/pageDetect';
 import { detectSelectedText } from '../../services/textDetect';
 import type { DetectionResult } from '../../lib/jobDetect/types';
@@ -61,6 +64,7 @@ export default function AiButton() {
   const abortRef = useRef<AbortController | null>(null);
   const selectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const dropdownRef = useRef<PostDropdownHandle | null>(null);
+  const chatPanelRef = useRef<ChatPanelHandle | null>(null);
 
   useEffect(() => {
     detectPageType().then(setPageResult).catch(() => {});
@@ -104,8 +108,18 @@ export default function AiButton() {
       dropdownRef.current?.refresh();
       setSelectedPostId(post.id);
       showInfoToast('Post saved');
+
+      // Fire-and-forget fit analysis — runs in background after the post is saved
+      const savedPost = post;
+      (async () => {
+        const [resume, userPrompt] = await Promise.all([getResumeFile(), getUserPromptFile()]);
+        if (!resume || !userPrompt) return;
+        const analysis = await analyzeFit(savedPost, resume.text, userPrompt.content);
+        await updatePost(savedPost.id, { fitAnalysis: analysis });
+        await chatPanelRef.current?.injectFitResult(savedPost.id, analysis);
+      })().catch(console.error);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return; // user cancelled, no toast
+      if (err instanceof Error && err.name === 'AbortError') return;
       showErrorToast(err instanceof Error ? err.message : String(err));
     } finally {
       abortRef.current = null;
@@ -115,7 +129,7 @@ export default function AiButton() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
-      {selectedPostId && <DownloadBar postId={selectedPostId} />}
+      <ChatPanel ref={chatPanelRef} postId={selectedPostId} />
       <PostDropdown ref={dropdownRef} selectedId={selectedPostId} onSelect={setSelectedPostId} />
       <div style={{ display: 'flex', alignItems: 'center', height: '86px', flexShrink: 0, padding: '0 10px', gap: 8 }}>
         <StatusBadge result={selectionResult ?? pageResult} isSelection={!!selectionResult} />

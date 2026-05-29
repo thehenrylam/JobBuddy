@@ -19,7 +19,8 @@ export default defineContentScript({
       position: 'fixed',
       right: '24px',
       bottom: '24px',
-      width: '264px',
+      width: '528px',
+      colorScheme: 'light',
       backgroundColor: '#ffffff',
       borderRadius: '16px',
       boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
@@ -48,6 +49,7 @@ export default defineContentScript({
       transition: 'color 0.15s ease, background 0.15s ease',
     });
     dragHandle.textContent = '⋮⋮';
+    panel.dataset.jbPanel = 'true';
     panel.appendChild(dragHandle);
 
     dragHandle.addEventListener('mouseenter', () => {
@@ -92,10 +94,11 @@ export default defineContentScript({
       if (!isDragging) return;
       const x = Math.max(0, Math.min(e.clientX - dragOffsetX, window.innerWidth - panel.offsetWidth));
       const y = Math.max(0, Math.min(e.clientY - dragOffsetY, window.innerHeight - panel.offsetHeight));
-      panel.style.left = `${x}px`;
-      panel.style.top = `${y}px`;
-      panel.style.right = 'auto';
-      panel.style.bottom = 'auto';
+      // Keep bottom-right anchoring so the panel grows upward when chat expands
+      panel.style.right = `${window.innerWidth - x - panel.offsetWidth}px`;
+      panel.style.bottom = `${window.innerHeight - y - panel.offsetHeight}px`;
+      panel.style.left = 'auto';
+      panel.style.top = 'auto';
     });
 
     document.addEventListener('mouseup', () => {

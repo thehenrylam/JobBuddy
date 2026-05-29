@@ -16,3 +16,10 @@ export async function deletePost(id: string): Promise<void> {
   const posts = await getSavedPosts();
   await browser.storage.local.set({ [STORAGE_KEY]: posts.filter((p) => p.id !== id) });
 }
+
+export async function updatePost(id: string, updates: Partial<JobPost>): Promise<void> {
+  const posts = await getSavedPosts();
+  await browser.storage.local.set({
+    [STORAGE_KEY]: posts.map((p) => (p.id === id ? { ...p, ...updates } : p)),
+  });
+}
