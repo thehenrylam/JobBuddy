@@ -6,7 +6,7 @@ export default defineConfig({
     name: 'JobBuddy',
     description: 'Parse job descriptions into Markdown and analyze them with LLMs.',
     version: '0.1.0',
-    permissions: ['activeTab', 'storage', 'scripting'],
+    permissions: ['activeTab', 'storage', 'scripting', 'unlimitedStorage', 'windows'],
     host_permissions: ['<all_urls>'],
     icons: {
       16: '/icons/JobBuddy-16x16.png',

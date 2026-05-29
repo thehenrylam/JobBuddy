@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getResumeFile, getUserPromptFile, getAboutUser } from '../../services/aboutUser';
 
 const VERSION = browser.runtime.getManifest().version;
 const STORAGE_KEY = 'floatingButtonVisible';
@@ -25,15 +26,38 @@ function GearIcon() {
   );
 }
 
-export default function MainView({ onSettings, onLlmSettings }: { onSettings: () => void; onLlmSettings: () => void }) {
+export default function MainView({ onSettings, onLlmSettings, onAboutUser }: { onSettings: () => void; onLlmSettings: () => void; onAboutUser: () => void }) {
   const [isActive, setIsActive] = useState(false);
   const [llmConfig, setLLMConfig] = useState<{ type: string; baseUrl: string; model: string } | null>(null);
+  const [aboutLabel, setAboutLabel] = useState<string | null>(null);
+  const [aboutHasFiles, setAboutHasFiles] = useState(false);
+
+  const loadAboutUser = () => {
+    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser()]).then(([resume, userPrompt, aboutUser]) => {
+      const hasFiles = !!(resume || userPrompt);
+      setAboutHasFiles(hasFiles);
+      if (!hasFiles) { setAboutLabel(null); return; }
+      const filenames = [resume?.filename, userPrompt?.filename].filter(Boolean).join(', ');
+      const name = aboutUser?.name;
+      setAboutLabel(name ? `${name}${filenames ? ` · ${filenames}` : ''}` : filenames);
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     browser.storage.local.get([STORAGE_KEY, 'llmConfig']).then((result) => {
       setIsActive(result[STORAGE_KEY] ?? false);
       setLLMConfig(result.llmConfig ?? null);
     });
+    loadAboutUser();
+
+    const onStorageChange = (changes: Record<string, browser.storage.StorageChange>, area: string) => {
+      if (area !== 'local') return;
+      if ('resumeFile' in changes || 'userPromptFile' in changes || 'aboutUser' in changes) {
+        loadAboutUser();
+      }
+    };
+    browser.storage.onChanged.addListener(onStorageChange);
+    return () => browser.storage.onChanged.removeListener(onStorageChange);
   }, []);
 
   const handleActivate = async () => {
@@ -60,6 +84,16 @@ export default function MainView({ onSettings, onLlmSettings }: { onSettings: ()
       ) : (
         <div className="jb-clickable" style={{ ...styles.llmMissing, cursor: 'pointer' }} onClick={onLlmSettings}>
           No LLM Selected
+        </div>
+      )}
+
+      {aboutHasFiles ? (
+        <div className="jb-clickable" style={{ ...styles.aboutActive, cursor: 'pointer' }} onClick={onAboutUser}>
+          <span style={styles.aboutLabel}>{aboutLabel}</span>
+        </div>
+      ) : (
+        <div className="jb-clickable" style={{ ...styles.aboutMissing, cursor: 'pointer' }} onClick={onAboutUser}>
+          No Profile
         </div>
       )}
 
@@ -133,6 +167,31 @@ const styles: Record<string, React.CSSProperties> = {
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  aboutMissing: {
+    fontSize: 12,
+    fontWeight: 500,
+    color: '#9f1239',
+    backgroundColor: '#fff1f2',
+    border: '1px solid #fecdd3',
+    borderRadius: 6,
+    padding: '8px 10px',
+  },
+  aboutActive: {
+    display: 'flex',
+    alignItems: 'center',
+    backgroundColor: '#f0fdf4',
+    border: '1px solid #bbf7d0',
+    borderRadius: 6,
+    padding: '8px 10px',
+    overflow: 'hidden',
+  },
+  aboutLabel: {
+    fontSize: 12,
+    color: '#166534',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap' as const,
   },
   buttonRow: {
     display: 'flex',

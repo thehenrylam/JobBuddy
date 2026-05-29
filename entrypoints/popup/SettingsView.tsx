@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { type LLMConfig } from '../../services/llm';
 import { getSavedPosts } from '../../services/savedPosts';
+import { getResumeFile, getUserPromptFile, getAboutUser } from '../../services/aboutUser';
 import type { DetectionResult, PageClassification } from '../../lib/jobDetect/types';
+import type { AboutUserStatus } from '../../lib/aboutUser/types';
 
 const DRAFT_KEY = 'llmConfigDraft';
 
@@ -79,19 +81,53 @@ const CLASSIFICATION_COLORS: Record<PageClassification, { color: string; backgro
   unknown: { color: '#6b7280', background: '#f5f5f5', border: '#e5e7eb' },
 };
 
-export default function SettingsView({ onBack, onLlmSettings, onSavedPosts }: { onBack: () => void; onLlmSettings: () => void; onSavedPosts: () => void }) {
+function aboutUserStatusDotColor(status: AboutUserStatus): string {
+  const colors: Record<AboutUserStatus, string> = {
+    critical: '#dc2626', caution: '#d97706', okay: '#16a34a', working: '#2563eb', waiting: '#9ca3af',
+  };
+  return colors[status];
+}
+
+export default function SettingsView({ onBack, onLlmSettings, onSavedPosts, onAboutUser }: { onBack: () => void; onLlmSettings: () => void; onSavedPosts: () => void; onAboutUser: () => void }) {
   const [savedConfig, setSavedConfig] = useState<LLMConfig | null>(null);
   const [savedPostCount, setSavedPostCount] = useState(0);
+  const [aboutUserStatus, setAboutUserStatus] = useState<AboutUserStatus>('critical');
+  const [aboutUserSummary, setAboutUserSummary] = useState<string>('No profile');
   const [devToolsOpen, setDevToolsOpen] = useState(false);
   const [tokenEstimate, setTokenEstimate] = useState<string | null>(null);
   const [detectionResult, setDetectionResult] = useState<DetectionResult | null>(null);
   const [detecting, setDetecting] = useState(false);
+
+  const loadAboutUser = () => {
+    Promise.all([getResumeFile(), getUserPromptFile(), getAboutUser()]).then(([resume, userPrompt, aboutUser]) => {
+      const hasSource = !!(resume || userPrompt);
+      let status: AboutUserStatus;
+      if (!hasSource) status = 'critical';
+      else if (!aboutUser || (!aboutUser.name && aboutUser.skills.length === 0)) status = 'caution';
+      else status = 'okay';
+      setAboutUserStatus(status);
+
+      const filenames = [resume?.filename, userPrompt?.filename].filter(Boolean).join(', ');
+      const name = aboutUser?.name;
+      setAboutUserSummary(name ? `${name}${filenames ? ` · ${filenames}` : ''}` : filenames || 'No profile');
+    }).catch(() => {});
+  };
 
   useEffect(() => {
     browser.storage.local.get('llmConfig').then((result) => {
       setSavedConfig(result.llmConfig ?? null);
     });
     getSavedPosts().then((posts) => setSavedPostCount(posts.length)).catch(() => {});
+    loadAboutUser();
+
+    const onStorageChange = (changes: Record<string, browser.storage.StorageChange>, area: string) => {
+      if (area !== 'local') return;
+      if ('resumeFile' in changes || 'userPromptFile' in changes || 'aboutUser' in changes) {
+        loadAboutUser();
+      }
+    };
+    browser.storage.onChanged.addListener(onStorageChange);
+    return () => browser.storage.onChanged.removeListener(onStorageChange);
   }, []);
 
   const handleClear = async () => {
@@ -174,6 +210,26 @@ export default function SettingsView({ onBack, onLlmSettings, onSavedPosts }: { 
                 <TrashIcon />
               </button>
             )}
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <p style={styles.sectionLabel}>About Me</p>
+        <div style={styles.configCard}>
+          <div style={styles.configDetails}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+              <span style={{
+                width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
+                background: aboutUserStatusDotColor(aboutUserStatus),
+              }} />
+              <span style={styles.configUrl}>{aboutUserSummary}</span>
+            </div>
+          </div>
+          <div style={styles.configActions}>
+            <button className="jb-btn-ghost" style={styles.manageButton} onClick={onAboutUser}>
+              Manage →
+            </button>
           </div>
         </div>
       </section>
