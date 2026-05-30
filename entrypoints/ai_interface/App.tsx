@@ -1,8 +1,11 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { createJobPost } from '../../services/llmJobPost';
 import { savePost, updatePost } from '../../services/savedPosts';
-import { getResumeFile, getUserPromptFile } from '../../services/aboutUser';
+import { getResumeFile, getUserPromptFile, getAboutUser } from '../../services/aboutUser';
 import { analyzeFit } from '../../services/llmJobFit';
+import { scanFormFields } from '../../services/formDetect';
+import { prefillFields, fillFormFields, flattenFields, buildAutofillPrompt, mergeAiResponses, cleanupFieldIds } from '../../services/formFill';
+import { extractJsonBlock } from '../../lib/extractJsonBlock';
 import { showErrorToast, showInfoToast } from './toast';
 import StatusBadge from './StatusBadge';
 import PostDropdown from './PostDropdown';
@@ -53,6 +56,25 @@ function SpinnerIcon() {
   );
 }
 
+function FillFormIcon() {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" width={32} height={32}>
+      {/* Document outline */}
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+        d="M14 2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V7Z" />
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14 2v5h5" />
+      {/* Form lines */}
+      <path strokeLinecap="round" strokeWidth={1.5} d="M8 12h5M8 15h3" />
+      {/* Sparkle badge bottom-right */}
+      <g transform="translate(13.5, 13.5) scale(0.55)">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+          d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+      </g>
+    </svg>
+  );
+}
+
 export default function AiButton() {
   const [bg, setBg] = useState('rgba(37, 99, 235, 0.08)');
   const [scale, setScale] = useState(1);
@@ -90,14 +112,7 @@ export default function AiButton() {
     };
   }, []);
 
-  const handleClick = async () => {
-    if (isLoading) {
-      abortRef.current?.abort();
-      abortRef.current = null;
-      setIsLoading(false);
-      return;
-    }
-
+  const handleSavePost = async () => {
     const controller = new AbortController();
     abortRef.current = controller;
     setIsLoading(true);
@@ -109,7 +124,6 @@ export default function AiButton() {
       setSelectedPostId(post.id);
       showInfoToast('Post saved');
 
-      // Fire-and-forget fit analysis — runs in background after the post is saved
       const savedPost = post;
       (async () => {
         const [resume, userPrompt] = await Promise.all([getResumeFile(), getUserPromptFile()]);
@@ -127,6 +141,63 @@ export default function AiButton() {
     }
   };
 
+  const handleAutofill = async () => {
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsLoading(true);
+
+    try {
+      // Step 1: Scan the page for form fields
+      const schema = scanFormFields();
+      const allLeafFields = flattenFields(schema.fields);
+      if (allLeafFields.length === 0) {
+        showInfoToast('No form fields detected on this page');
+        return;
+      }
+
+      // Step 2: Rule-based pre-fill from AboutUser profile
+      const user = await getAboutUser();
+      const partial = user ? prefillFields(schema, user) : schema;
+
+      // Step 3: AI pass for any fields still null
+      const nullFields = flattenFields(partial.fields).filter(
+        (f) => f.response === null && f.type !== 'file' && !f.fields,
+      );
+      if (nullFields.length > 0 && chatPanelRef.current) {
+        const prompt = buildAutofillPrompt(nullFields);
+        const raw = await chatPanelRef.current.sendSilentMessage(prompt);
+        const aiMap = extractJsonBlock(raw) as Record<string, unknown>;
+        mergeAiResponses(partial, aiMap);
+      }
+
+      // Step 4: Fill the DOM
+      fillFormFields(partial);
+      showInfoToast('Form filled — please review before submitting');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') return;
+      showErrorToast(err instanceof Error ? err.message : String(err));
+    } finally {
+      abortRef.current = null;
+      setIsLoading(false);
+      cleanupFieldIds();
+    }
+  };
+
+  const handleClick = async () => {
+    if (isLoading) {
+      abortRef.current?.abort();
+      abortRef.current = null;
+      setIsLoading(false);
+      return;
+    }
+
+    if (selectedPostId) {
+      handleAutofill();
+    } else {
+      handleSavePost();
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', width: '100%', boxSizing: 'border-box' }} onMouseDown={(e) => e.stopPropagation()}>
       <ChatPanel ref={chatPanelRef} postId={selectedPostId} />
@@ -140,8 +211,9 @@ export default function AiButton() {
           onMouseDown={(e) => { e.stopPropagation(); setBg('rgba(37, 99, 235, 0.28)'); setScale(0.92); }}
           onMouseUp={() => { setBg('rgba(37, 99, 235, 0.16)'); setScale(1); }}
           onClick={handleClick}
+          title={selectedPostId ? 'Autofill form with AI' : 'Save job post'}
         >
-          {isLoading ? <SpinnerIcon /> : <StarIcon />}
+          {isLoading ? <SpinnerIcon /> : selectedPostId ? <FillFormIcon /> : <StarIcon />}
         </button>
       </div>
     </div>

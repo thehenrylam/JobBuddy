@@ -12,6 +12,7 @@ import type { FitAnalysis } from '../../lib/jobPost/types';
 
 export interface ChatPanelHandle {
   injectFitResult(postId: string, analysis: FitAnalysis): Promise<void>;
+  sendSilentMessage(text: string): Promise<string>;
 }
 
 const QUICK_REPLIES: { label: string; text: string }[] = [
@@ -135,6 +136,12 @@ const ChatPanel = forwardRef<ChatPanelHandle, { postId: string | null }>(({ post
         setMessages((prev) => [...prev, msg]);
         if (!isExpanded) setHasUnread(true);
       }
+    },
+    async sendSilentMessage(text: string): Promise<string> {
+      const systemPrompt = await buildSystemPrompt();
+      const userMsg = { role: 'user' as const, content: text };
+      const history = messages.map(({ role, content: c }) => ({ role, content: c }));
+      return callLLMChat({ systemPrompt, messages: [...history, userMsg] });
     },
   }));
 
