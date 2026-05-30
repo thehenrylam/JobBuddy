@@ -21,11 +21,15 @@ keywords: keyword1, keyword2, keyword3
 
 {Clean markdown of the job description and application process. Remove all navigation menus, ads, footer content, cookie notices, and anything unrelated to the job post itself. Preserve structure with markdown headings and lists.}`;
 
+const NAME_MAX_LEN = 25;
+const NAME_TRIM_LEN = 22;
+const ID_SUFFIX_LEN = 5;
+
 function buildName(job_title: string, company: string, id: string): string {
   const title = job_title === 'NULL' ? 'Unknown' : job_title;
   const co = company === 'NULL' ? 'Unknown' : company;
-  const truncated = title.length > 25 ? `${title.slice(0, 22)}...` : title;
-  return `${truncated} - ${co} (${id.slice(-5)})`;
+  const truncated = title.length > NAME_MAX_LEN ? `${title.slice(0, NAME_TRIM_LEN)}...` : title;
+  return `${truncated} - ${co} (${id.slice(-ID_SUFFIX_LEN)})`;
 }
 
 export async function createJobPost(

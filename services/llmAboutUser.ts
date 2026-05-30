@@ -1,4 +1,5 @@
 import { callLLM } from './llm';
+import { extractJsonBlock } from '../lib/extractJsonBlock';
 import type { AboutUser } from '../lib/aboutUser/types';
 
 const ABOUT_USER_PROMPT = `You are a profile extractor. Given one or both of the following sources — a RESUME and a USER PROMPT — extract a structured profile.
@@ -55,9 +56,7 @@ function buildData(resumeText: string | null, userPromptText: string | null): st
 }
 
 function parseResponse(raw: string): AboutUser {
-  const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const jsonStr = match ? match[1].trim() : raw.trim();
-  const parsed = JSON.parse(jsonStr) as AboutUser;
+  const parsed = extractJsonBlock(raw) as AboutUser;
   return {
     first_name: parsed.first_name ?? null,
     last_name: parsed.last_name ?? null,

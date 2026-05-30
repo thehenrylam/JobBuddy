@@ -1,4 +1,5 @@
 import { callLLM } from './llm';
+import { extractJsonBlock } from '../lib/extractJsonBlock';
 import type { JobPost, FitAnalysis } from '../lib/jobPost/types';
 
 const SYSTEM_PROMPT = `You are a helpful AI assisting the user with their job application process. You will be given a job posting, the applicant's resume, and a user prompt with additional context about their preferences and goals.
@@ -30,14 +31,14 @@ function buildData(post: JobPost, resumeText: string, userPromptText: string): s
   ].join('\n\n');
 }
 
+const MAX_ALERT_ITEMS = 3;
+
 function parseResponse(raw: string): FitAnalysis {
-  const match = raw.match(/```(?:json)?\s*([\s\S]*?)```/);
-  const jsonStr = match ? match[1].trim() : raw.trim();
-  const parsed = JSON.parse(jsonStr) as Partial<FitAnalysis>;
+  const parsed = extractJsonBlock(raw) as Partial<FitAnalysis>;
   return {
     score: parsed.score ?? 'N/A',
     comment: parsed.comment ?? '',
-    alert: Array.isArray(parsed.alert) ? parsed.alert.slice(0, 3) : [],
+    alert: Array.isArray(parsed.alert) ? parsed.alert.slice(0, MAX_ALERT_ITEMS) : [],
   };
 }
 

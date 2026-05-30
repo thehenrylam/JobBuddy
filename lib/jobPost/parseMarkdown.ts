@@ -2,14 +2,16 @@ import type { JobPost } from './types';
 
 type ParsedFields = Omit<JobPost, 'id' | 'name'>;
 
+const NULL_SENTINEL = 'NULL';
+
 function extractField(text: string, key: string): string {
   const match = text.match(new RegExp(`^${key}:\\s*(.+)$`, 'm'));
-  if (!match) return 'NULL';
+  if (!match) return NULL_SENTINEL;
   return match[1].trim().replace(/^["']|["']$/g, '');
 }
 
 function parsePayRange(raw: string): [number | null, number | null] {
-  if (!raw || raw.toUpperCase() === 'NULL') return [null, null];
+  if (!raw || raw.toUpperCase() === NULL_SENTINEL) return [null, null];
   const match = raw.match(/\[\s*([\d.]+|null)\s*,\s*([\d.]+|null)\s*\]/i);
   if (!match) return [null, null];
   const parse = (s: string) => (s.toLowerCase() === 'null' ? null : parseFloat(s));
@@ -17,7 +19,7 @@ function parsePayRange(raw: string): [number | null, number | null] {
 }
 
 function parseKeywords(raw: string): string[] {
-  if (!raw || raw.toUpperCase() === 'NULL') return [];
+  if (!raw || raw.toUpperCase() === NULL_SENTINEL) return [];
   return raw
     .replace(/^\[|\]$/g, '')
     .split(',')

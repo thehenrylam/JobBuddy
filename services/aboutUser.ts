@@ -19,7 +19,7 @@ export function computeHash(s: string): string {
   return (h >>> 0).toString(16);
 }
 
-export const DEFAULT_USER_PROMPT = `# USER.md 
+export const DEFAULT_USER_PROMPT = `# USER.md
 ## About The User
 
 I am a person looking to land a job
@@ -39,26 +39,37 @@ location:
 
 `;
 
+async function getKey<T>(key: string): Promise<T | null> {
+  const result = await browser.storage.local.get(key);
+  return (result[key] as T) ?? null;
+}
+
+async function setKey<T>(key: string, value: T): Promise<void> {
+  await browser.storage.local.set({ [key]: value });
+}
+
+async function clearKey(key: string): Promise<void> {
+  await browser.storage.local.remove(key);
+}
+
 export async function getResumeFile(): Promise<ResumeFile | null> {
-  const result = await browser.storage.local.get(RESUME_KEY);
-  return (result[RESUME_KEY] as ResumeFile) ?? null;
+  return getKey<ResumeFile>(RESUME_KEY);
 }
 
 export async function saveResumeFile(f: ResumeFile): Promise<void> {
-  await browser.storage.local.set({ [RESUME_KEY]: f });
+  return setKey(RESUME_KEY, f);
 }
 
 export async function clearResumeFile(): Promise<void> {
-  await browser.storage.local.remove(RESUME_KEY);
+  return clearKey(RESUME_KEY);
 }
 
 export async function getUserPromptFile(): Promise<UserPromptFile | null> {
-  const result = await browser.storage.local.get(USER_PROMPT_KEY);
-  return (result[USER_PROMPT_KEY] as UserPromptFile) ?? null;
+  return getKey<UserPromptFile>(USER_PROMPT_KEY);
 }
 
 export async function saveUserPromptFile(f: UserPromptFile): Promise<void> {
-  await browser.storage.local.set({ [USER_PROMPT_KEY]: f });
+  return setKey(USER_PROMPT_KEY, f);
 }
 
 export async function resetUserPromptToDefault(): Promise<void> {
@@ -66,40 +77,37 @@ export async function resetUserPromptToDefault(): Promise<void> {
 }
 
 export async function getAboutUser(): Promise<AboutUser | null> {
-  const result = await browser.storage.local.get(ABOUT_USER_KEY);
-  return (result[ABOUT_USER_KEY] as AboutUser) ?? null;
+  return getKey<AboutUser>(ABOUT_USER_KEY);
 }
 
 export async function saveAboutUser(a: AboutUser): Promise<void> {
-  await browser.storage.local.set({ [ABOUT_USER_KEY]: a });
+  return setKey(ABOUT_USER_KEY, a);
 }
 
 export async function clearAboutUser(): Promise<void> {
-  await browser.storage.local.remove(ABOUT_USER_KEY);
+  return clearKey(ABOUT_USER_KEY);
 }
 
 export async function getSourceHash(): Promise<SourceHash | null> {
-  const result = await browser.storage.local.get(SOURCE_HASH_KEY);
-  return (result[SOURCE_HASH_KEY] as SourceHash) ?? null;
+  return getKey<SourceHash>(SOURCE_HASH_KEY);
 }
 
 export async function saveSourceHash(h: SourceHash): Promise<void> {
-  await browser.storage.local.set({ [SOURCE_HASH_KEY]: h });
+  return setKey(SOURCE_HASH_KEY, h);
 }
 
 export async function clearSourceHash(): Promise<void> {
-  await browser.storage.local.remove(SOURCE_HASH_KEY);
+  return clearKey(SOURCE_HASH_KEY);
 }
 
 export async function getParseStatus(): Promise<ParseStatus | null> {
-  const result = await browser.storage.local.get(PARSE_STATUS_KEY);
-  return (result[PARSE_STATUS_KEY] as ParseStatus) ?? null;
+  return getKey<ParseStatus>(PARSE_STATUS_KEY);
 }
 
 export async function saveParseStatus(s: ParseStatus): Promise<void> {
-  await browser.storage.local.set({ [PARSE_STATUS_KEY]: s });
+  return setKey(PARSE_STATUS_KEY, s);
 }
 
 export async function clearParseStatus(): Promise<void> {
-  await browser.storage.local.remove(PARSE_STATUS_KEY);
+  return clearKey(PARSE_STATUS_KEY);
 }

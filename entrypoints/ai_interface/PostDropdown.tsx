@@ -67,16 +67,6 @@ function SearchIcon() {
   );
 }
 
-function ChevronIcon({ open }: { open: boolean }) {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
-      strokeWidth={2.5} stroke="currentColor" width={10} height={10}
-      style={{ transform: open ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s ease' }}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
-    </svg>
-  );
-}
-
 function DownloadIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -87,10 +77,167 @@ function DownloadIcon() {
   );
 }
 
-// ── Component ─────────────────────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
 
 const ITEM_HEIGHT = 34;
 const MAX_VISIBLE = 6;
+const POPUP_OFFSET_PX = 6;
+
+// ── Styles ────────────────────────────────────────────────────────────────────
+
+const styles = {
+  wrapper: {
+    width: '100%',
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 8px 4px',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+
+  trigger: (isOpen: boolean): React.CSSProperties => ({
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    background: '#ffffff',
+    border: isOpen ? '1px solid #2563eb' : '1px solid #d1d5db',
+    boxShadow: isOpen ? '0 0 0 2px rgba(37,99,235,0.15)' : 'none',
+    borderRadius: 6,
+    height: 28,
+    padding: '0 8px',
+    boxSizing: 'border-box',
+    cursor: 'pointer',
+    transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
+    userSelect: 'none',
+    minWidth: 0,
+  }),
+
+  triggerIcon: {
+    display: 'flex',
+    alignItems: 'center',
+    color: '#9ca3af',
+    flexShrink: 0,
+  } as React.CSSProperties,
+
+  triggerText: (hasSelection: boolean): React.CSSProperties => ({
+    flex: 1,
+    fontSize: 11,
+    fontFamily: 'sans-serif',
+    color: hasSelection ? '#374151' : '#9ca3af',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    minWidth: 0,
+  }),
+
+  downloadButton: (enabled: boolean): React.CSSProperties => ({
+    width: 28,
+    height: 28,
+    flexShrink: 0,
+    background: '#eff6ff',
+    border: '1px solid #bfdbfe',
+    borderRadius: 6,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#2563eb',
+    padding: 0,
+    cursor: enabled ? 'pointer' : 'not-allowed',
+    opacity: enabled ? 1 : 0.35,
+    transition: 'filter 0.12s ease',
+  }),
+
+  popup: {
+    position: 'fixed',
+    zIndex: 2147483647,
+    background: '#ffffff',
+    border: '1px solid #e5e7eb',
+    borderRadius: 8,
+    boxShadow: '0 -4px 16px rgba(0,0,0,0.12)',
+    colorScheme: 'light',
+    overflow: 'hidden',
+    fontFamily: 'sans-serif',
+    display: 'flex',
+    flexDirection: 'column',
+  } as React.CSSProperties,
+
+  list: {
+    overflowY: 'auto',
+    maxHeight: MAX_VISIBLE * ITEM_HEIGHT,
+  } as React.CSSProperties,
+
+  emptyState: {
+    padding: '10px 12px',
+    fontSize: 11,
+    color: '#9ca3af',
+    fontStyle: 'italic',
+  } as React.CSSProperties,
+
+  searchRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    padding: '6px 8px',
+    borderTop: '1px solid #e5e7eb',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+
+  searchBox: {
+    flex: 1,
+    display: 'flex',
+    alignItems: 'center',
+    gap: 4,
+    background: '#ffffff',
+    border: '1px solid #2563eb',
+    boxShadow: '0 0 0 2px rgba(37,99,235,0.15)',
+    borderRadius: 6,
+    height: 28,
+    padding: '0 8px',
+    boxSizing: 'border-box',
+  } as React.CSSProperties,
+
+  searchInput: {
+    flex: 1,
+    height: '100%',
+    fontSize: 11,
+    border: 'none',
+    outline: 'none',
+    background: 'transparent',
+    fontFamily: 'sans-serif',
+    color: '#374151',
+    minWidth: 0,
+    padding: 0,
+  } as React.CSSProperties,
+
+  noneButton: (isNoneSelected: boolean): React.CSSProperties => ({
+    flexShrink: 0,
+    height: 28,
+    padding: '0 10px',
+    fontSize: 11,
+    fontFamily: 'sans-serif',
+    background: isNoneSelected ? '#eff6ff' : '#ffffff',
+    border: `1px solid ${isNoneSelected ? '#93c5fd' : '#d1d5db'}`,
+    borderRadius: 6,
+    color: isNoneSelected ? '#1d4ed8' : '#6b7280',
+    cursor: 'pointer',
+    fontStyle: 'italic',
+    whiteSpace: 'nowrap',
+    boxSizing: 'border-box',
+  }),
+
+  itemText: {
+    fontSize: 11,
+    color: '#374151',
+    fontFamily: 'sans-serif',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  } as React.CSSProperties,
+};
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 const PostDropdown = forwardRef<PostDropdownHandle, Props>(({ selectedId, onSelect }, ref) => {
   const [posts, setPosts] = useState<JobPost[]>([]);
@@ -116,12 +263,11 @@ const PostDropdown = forwardRef<PostDropdownHandle, Props>(({ selectedId, onSele
     if (!triggerRef.current) return;
     const r = triggerRef.current.getBoundingClientRect();
     setPopupRect({
-      bottom: window.innerHeight - r.bottom - 6,
+      bottom: window.innerHeight - r.bottom - POPUP_OFFSET_PX,
       left: r.left,
       width: r.width,
     });
     setIsOpen(true);
-    // Focus search input after render
     requestAnimationFrame(() => searchInputRef.current?.focus());
   }, []);
 
@@ -164,28 +310,16 @@ const PostDropdown = forwardRef<PostDropdownHandle, Props>(({ selectedId, onSele
           <div
             ref={popupRef}
             style={{
-              position: 'fixed',
+              ...styles.popup,
               bottom: popupRect.bottom,
               left: popupRect.left,
               width: popupRect.width,
-              zIndex: 2147483647,
-              background: '#ffffff',
-              border: '1px solid #e5e7eb',
-              borderRadius: 8,
-              boxShadow: '0 -4px 16px rgba(0,0,0,0.12)',
-              colorScheme: 'light',
-              overflow: 'hidden',
-              fontFamily: 'sans-serif',
-              display: 'flex',
-              flexDirection: 'column',
             }}
           >
             {/* List — grows upward (sits above the search row) */}
-            <div style={{ overflowY: 'auto', maxHeight: MAX_VISIBLE * ITEM_HEIGHT }}>
+            <div style={styles.list}>
               {filtered.length === 0 ? (
-                <div style={{ padding: '10px 12px', fontSize: 11, color: '#9ca3af', fontStyle: 'italic' }}>
-                  No posts found
-                </div>
+                <div style={styles.emptyState}>No posts found</div>
               ) : (
                 filtered.map((post) => (
                   <div
@@ -195,74 +329,26 @@ const PostDropdown = forwardRef<PostDropdownHandle, Props>(({ selectedId, onSele
                     onMouseEnter={() => setHoveredId(post.id)}
                     onMouseLeave={() => setHoveredId(null)}
                   >
-                    <span style={{
-                      fontSize: 11,
-                      color: '#374151',
-                      fontFamily: 'sans-serif',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {post.name}
-                    </span>
+                    <span style={styles.itemText}>{post.name}</span>
                   </div>
                 ))
               )}
             </div>
 
             {/* Search + None row — at the bottom, aligned over the trigger */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '6px 8px', borderTop: '1px solid #e5e7eb', boxSizing: 'border-box' }}>
-              <div style={{
-                flex: 1,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 4,
-                background: '#ffffff',
-                border: '1px solid #2563eb',
-                boxShadow: '0 0 0 2px rgba(37,99,235,0.15)',
-                borderRadius: 6,
-                height: 28,
-                padding: '0 8px',
-                boxSizing: 'border-box',
-              }}>
-                <span style={{ display: 'flex', alignItems: 'center', color: '#9ca3af', flexShrink: 0 }}>
-                  <SearchIcon />
-                </span>
+            <div style={styles.searchRow}>
+              <div style={styles.searchBox}>
+                <span style={styles.triggerIcon}><SearchIcon /></span>
                 <input
                   ref={searchInputRef}
-                  style={{
-                    flex: 1,
-                    height: '100%',
-                    fontSize: 11,
-                    border: 'none',
-                    outline: 'none',
-                    background: 'transparent',
-                    fontFamily: 'sans-serif',
-                    color: '#374151',
-                    minWidth: 0,
-                    padding: 0,
-                  }}
+                  style={styles.searchInput}
                   placeholder="Filter posts…"
                   value={query}
                   onChange={(e) => setQuery(e.target.value)}
                 />
               </div>
               <button
-                style={{
-                  flexShrink: 0,
-                  height: 28,
-                  padding: '0 10px',
-                  fontSize: 11,
-                  fontFamily: 'sans-serif',
-                  background: selectedId === null ? '#eff6ff' : '#ffffff',
-                  border: `1px solid ${selectedId === null ? '#93c5fd' : '#d1d5db'}`,
-                  borderRadius: 6,
-                  color: selectedId === null ? '#1d4ed8' : '#6b7280',
-                  cursor: 'pointer',
-                  fontStyle: 'italic',
-                  whiteSpace: 'nowrap',
-                  boxSizing: 'border-box',
-                }}
+                style={styles.noneButton(selectedId === null)}
                 onMouseDown={(e) => { e.preventDefault(); handleSelect(null); }}
               >
                 — None
@@ -275,75 +361,25 @@ const PostDropdown = forwardRef<PostDropdownHandle, Props>(({ selectedId, onSele
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <div style={{
-      width: '100%',
-      flexShrink: 0,
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      padding: '6px 8px 4px',
-      boxSizing: 'border-box',
-    }}>
+    <div style={styles.wrapper} onMouseDown={(e) => e.stopPropagation()}>
       {/* Trigger — read-only display, click to open popup */}
       <div
         ref={triggerRef}
-        style={{
-          flex: 1,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          background: '#ffffff',
-          border: isOpen ? '1px solid #2563eb' : '1px solid #d1d5db',
-          boxShadow: isOpen ? '0 0 0 2px rgba(37,99,235,0.15)' : 'none',
-          borderRadius: 6,
-          height: 28,
-          padding: '0 8px',
-          boxSizing: 'border-box',
-          cursor: 'pointer',
-          transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
-          userSelect: 'none',
-          minWidth: 0,
-        }}
+        style={styles.trigger(isOpen)}
         onMouseDown={(e) => {
           e.preventDefault();
           if (isOpen) close(); else openPopup();
         }}
       >
-        <span style={{ display: 'flex', alignItems: 'center', color: '#9ca3af', flexShrink: 0 }}>
-          <SearchIcon />
-        </span>
-        <span style={{
-          flex: 1,
-          fontSize: 11,
-          fontFamily: 'sans-serif',
-          color: selectedPost ? '#374151' : '#9ca3af',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-          minWidth: 0,
-        }}>
+        <span style={styles.triggerIcon}><SearchIcon /></span>
+        <span style={styles.triggerText(!!selectedPost)}>
           {selectedPost ? selectedPost.name : 'Select a post…'}
         </span>
       </div>
 
       {/* Download button */}
       <button
-        style={{
-          width: 28,
-          height: 28,
-          flexShrink: 0,
-          background: '#eff6ff',
-          border: '1px solid #bfdbfe',
-          borderRadius: 6,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          color: '#2563eb',
-          padding: 0,
-          cursor: selectedPost ? 'pointer' : 'not-allowed',
-          opacity: selectedPost ? 1 : 0.35,
-          transition: 'filter 0.12s ease',
-        }}
+        style={styles.downloadButton(!!selectedPost)}
         disabled={!selectedPost}
         onMouseDown={(e) => e.preventDefault()}
         onClick={handleDownload}
